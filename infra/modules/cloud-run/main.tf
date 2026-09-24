@@ -191,7 +191,6 @@ resource "google_cloud_run_v2_service" "orchestrator_alerts" {
     }
     containers {
       image = var.container_image_orchestrator
-      args  = ["--stage-family=alerts"]
     }
   }
 }
@@ -214,7 +213,6 @@ resource "google_cloud_run_v2_service" "orchestrator_incidents" {
     }
     containers {
       image = var.container_image_orchestrator
-      args  = ["--stage-family=incidents"]
     }
   }
 }
@@ -235,7 +233,6 @@ resource "google_cloud_run_v2_service" "orchestrator_predictive" {
     }
     containers {
       image = var.container_image_orchestrator
-      args  = ["--stage-family=predictive"]
     }
   }
 }
