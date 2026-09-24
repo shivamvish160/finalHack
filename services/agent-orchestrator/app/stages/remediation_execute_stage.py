@@ -36,17 +36,28 @@ async def handle_remediation_approved(payload: dict[str, Any]) -> dict[str, Any]
     )
 
     bq_client = BigQueryClient()
+    # Real remediation_logs schema (INFORMATION_SCHEMA-verified) has no
+    # outcome/detail/executed_at columns -- status/error_output/finished_at
+    # are the real columns, plus execution_id/executed_by/hitl_approved.
     insert_log_sql = """
-        INSERT INTO `sre_incident_mart.remediation_logs` (incident_id, runbook_id, outcome, detail, executed_at)
-        VALUES (@incident_id, @runbook_id, @outcome, @detail, CURRENT_TIMESTAMP())
+        INSERT INTO `sre_incident_mart.remediation_logs`
+            (execution_id, incident_id, runbook_id, status, executed_script, error_output,
+             executed_by, hitl_approved, started_at, finished_at)
+        VALUES
+            (@execution_id, @incident_id, @runbook_id, @status, @executed_script, @error_output,
+             @executed_by, @hitl_approved, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP())
     """
     bq_client.query(
         insert_log_sql,
         [
+            param("execution_id", "STRING", action_id),
             param("incident_id", "STRING", incident_id),
             param("runbook_id", "STRING", approval.get("runbookId")),
-            param("outcome", "STRING", "Succeeded" if result["success"] else "Failed"),
-            param("detail", "STRING", result["detail"]),
+            param("status", "STRING", "Succeeded" if result["success"] else "Failed"),
+            param("executed_script", "STRING", approval.get("fixScript")),
+            param("error_output", "STRING", None if result["success"] else result["detail"]),
+            param("executed_by", "STRING", approval.get("approverUid") or "system"),
+            param("hitl_approved", "BOOL", True),
         ],
     )
     firestore_client.record_execution_result(action_id, result["success"], result["detail"])

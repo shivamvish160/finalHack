@@ -45,7 +45,7 @@ def test_topology_mapping_reflects_held_out_lookup_table_not_a_fixed_answer():
 
 
 def test_runbook_match_response_reflects_held_out_distance_not_a_fixed_score():
-    close_match = build_match_response([{"runbook_id": "held-out-rb", "distance": 0.05, "recommended_actions": "x"}])
-    far_match = build_match_response([{"runbook_id": "held-out-rb", "distance": 0.95, "recommended_actions": "x"}])
+    close_match = build_match_response([{"runbook_id": "held-out-rb", "distance": 0.05, "remediation_steps": "x"}])
+    far_match = build_match_response([{"runbook_id": "held-out-rb", "distance": 0.95, "remediation_steps": "x"}])
     assert close_match["similarityScore"] != far_match["similarityScore"]
     assert close_match["belowThreshold"] != far_match["belowThreshold"]

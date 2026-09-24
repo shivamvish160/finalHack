@@ -28,9 +28,9 @@ def find_matching_runbooks(bq_client: BigQueryClient, query_text: str, top_k: in
     the runbooks corpus itself is never re-embedded by this platform.
     """
     sql = """
-        SELECT base.runbook_id, base.title, base.recommended_actions, distance
+        SELECT base.runbook_id, base.title, base.remediation_steps, distance
         FROM VECTOR_SEARCH(
-            (SELECT runbook_id, title, recommended_actions, embedding FROM `sre_knowledge_base.runbooks`),
+            (SELECT runbook_id, title, remediation_steps, embedding FROM `sre_knowledge_base.runbooks`),
             'embedding',
             (
                 SELECT ml_generate_embedding_result AS embedding
@@ -60,7 +60,7 @@ def build_match_response(matches: list[dict[str, Any]], threshold: float = DEFAU
     return {
         "runbookId": best["runbook_id"],
         "similarityScore": similarity,
-        "recommendedActions": best.get("recommended_actions"),
+        "recommendedActions": best.get("remediation_steps"),
         "belowThreshold": similarity < threshold,
     }
 
