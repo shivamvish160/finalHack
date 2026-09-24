@@ -23,12 +23,18 @@ def create_app() -> FastAPI:
     # every browser fetch() needs CORS headers or it's silently blocked.
     # Auth is a Bearer token (not cookies), so credentials aren't needed --
     # and browsers reject Access-Control-Allow-Origin: * combined with
-    # allow_credentials=True anyway.
+    # allow_credentials=True anyway. Cloud Run exposes EVERY service under
+    # both a *.a.run.app and a *.<region>.run.app hostname for the same
+    # revision -- matching only one exact FRONTEND_ORIGIN string breaks
+    # CORS the moment someone opens the other valid URL, so this also
+    # accepts any origin matching either Cloud Run hostname pattern for a
+    # service starting with "frontend-".
     allowed_origins = [o for o in os.environ.get("FRONTEND_ORIGIN", "").split(",") if o]
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins or ["*"],
-        allow_credentials=bool(allowed_origins),
+        allow_origin_regex=r"https://frontend-[a-z0-9-]+\.(?:[a-z0-9-]+\.)?run\.app",
+        allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
