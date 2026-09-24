@@ -22,7 +22,6 @@ ENV NODE_ENV=production
 
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/public ./public
 
 # Next.js standalone server reads PORT from the environment -- Cloud Run
 # sets PORT=8080 automatically, no explicit --port flag needed.
