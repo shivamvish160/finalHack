@@ -23,7 +23,7 @@ from agents.alert_correlation.agent import (  # noqa: E402
     fetch_known_nodes,
     fetch_precedent_incidents,
 )
-from agents.common.bq_client import BigQueryClient, param  # noqa: E402
+from agents.common.bq_client import BigQueryClient, array_param, param  # noqa: E402
 from agents.common.firestore_client import FirestoreClient  # noqa: E402
 
 # Clustering window: alerts sharing a node/service within this many seconds
@@ -83,20 +83,31 @@ def _write_incident_and_correlations(
     known_nodes: dict[str, Any],
 ) -> None:
     affected_services = sorted({a["serviceName"] for a in cluster})
+    first_alert = cluster[0]
+    node = known_nodes.get(first_alert["nodeId"], {})
+
+    title = f"{first_alert['alertType']} on {', '.join(affected_services)}"
+    severity = _worst_severity(a["severity"] for a in cluster)
+    affected_region = node.get("region")
+    customer_tier_impacted = _fetch_customer_tier(bq_client, affected_services)
 
     merge_incident_sql = """
         MERGE `sre_incident_mart.incidents` T
         USING (SELECT @incident_id AS incident_id) S
         ON T.incident_id = S.incident_id
         WHEN NOT MATCHED THEN
-          INSERT (incident_id, status, started_at)
-          VALUES (@incident_id, @initial_status, CURRENT_TIMESTAMP())
+          INSERT (incident_id, status, started_at, title, severity, affected_region, customer_tier_impacted)
+          VALUES (@incident_id, @initial_status, CURRENT_TIMESTAMP(), @title, @severity, @affected_region, @customer_tier_impacted)
     """
     bq_client.query(
         merge_incident_sql,
         [
             param("incident_id", "STRING", incident_id),
             param("initial_status", "STRING", "Open"),
+            param("title", "STRING", title),
+            param("severity", "STRING", severity),
+            param("affected_region", "STRING", affected_region),
+            param("customer_tier_impacted", "STRING", customer_tier_impacted),
         ],
     )
 
@@ -115,3 +126,34 @@ def _write_incident_and_correlations(
                 param("alert_id", "STRING", alert["alertId"]),
             ],
         )
+
+
+# Highest-priority-first ranking covering both alert_stream's raw severity
+# values and the incidents table's own P1/P2/P3 scheme -- unrecognized
+# values still sort deterministically (worst-case, rank 0) rather than
+# crashing on an unexpected label.
+_SEVERITY_RANK = {"P1": 0, "CRITICAL": 0, "P2": 1, "WARNING": 1, "MAJOR": 1, "P3": 2, "INFO": 2, "MINOR": 2}
+
+
+def _worst_severity(severities: Any) -> str | None:
+    values = list(severities)
+    if not values:
+        return None
+    return min(values, key=lambda s: _SEVERITY_RANK.get((s or "").upper(), 0))
+
+
+def _fetch_customer_tier(bq_client: BigQueryClient, service_names: list[str]) -> str | None:
+    """Highest customer tier (GOLD > SILVER > BRONZE) among accounts linked
+    to any of this incident's affected services (FR-027-adjacent -- same
+    join key used by the Executive Impact agent)."""
+    sql = """
+        SELECT tier
+        FROM `sre_incident_mart.customer_accounts`
+        WHERE service_name IN UNNEST(@service_names)
+    """
+    rows = bq_client.query_json_rows(sql, [array_param("service_names", "STRING", service_names)])
+    tiers = [r["tier"] for r in rows if r.get("tier")]
+    if not tiers:
+        return None
+    tier_rank = {"GOLD": 0, "SILVER": 1, "BRONZE": 2}
+    return min(tiers, key=lambda t: tier_rank.get((t or "").upper(), 0))
