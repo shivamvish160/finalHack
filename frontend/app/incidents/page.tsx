@@ -4,10 +4,12 @@ import { useEffect, useState } from 'react';
 
 interface IncidentSummary {
   incident_id: string;
+  title: string | null;
   status: string;
-  opened_at: string;
-  root_cause?: string;
-  confidence?: number;
+  severity: string | null;
+  affected_region: string | null;
+  started_at: string;
+  resolved_at: string | null;
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_GATEWAY_URL ?? '';
@@ -15,17 +17,28 @@ const API_BASE = process.env.NEXT_PUBLIC_API_GATEWAY_URL ?? '';
 export default function LiveIncidentConsolePage() {
   const [incidents, setIncidents] = useState<IncidentSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
       try {
         const token = window.localStorage.getItem('idToken') ?? '';
+        if (!token) {
+          setError('Not signed in -- go to /login first.');
+          return;
+        }
         const res = await fetch(`${API_BASE}/incidents?status=all`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (res.ok) {
-          setIncidents(await res.json());
+        if (!res.ok) {
+          const body = await res.text();
+          setError(`Request failed (${res.status}): ${body}`);
+          return;
         }
+        setIncidents(await res.json());
+        setError(null);
+      } catch (e) {
+        setError(`Network error: ${e instanceof Error ? e.message : String(e)}`);
       } finally {
         setLoading(false);
       }
@@ -41,14 +54,21 @@ export default function LiveIncidentConsolePage() {
     <main className="p-8">
       <h1 className="text-2xl font-bold mb-4">Live Incident Console</h1>
       {loading && <p>Loading incidents...</p>}
+      {error && (
+        <p className="mb-4 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700">{error}</p>
+      )}
+      {!loading && !error && incidents.length === 0 && (
+        <p className="text-gray-500">No incidents yet -- run the alert replay to generate some.</p>
+      )}
       <table className="w-full text-left border-collapse">
         <thead>
           <tr className="border-b">
             <th className="py-2">Incident</th>
+            <th>Title</th>
             <th>Status</th>
-            <th>Root Cause</th>
-            <th>Confidence</th>
-            <th>Opened</th>
+            <th>Severity</th>
+            <th>Region</th>
+            <th>Started</th>
           </tr>
         </thead>
         <tbody>
@@ -59,6 +79,7 @@ export default function LiveIncidentConsolePage() {
                   {incident.incident_id}
                 </a>
               </td>
+              <td>{incident.title ?? '—'}</td>
               <td>
                 <span
                   className={
@@ -70,9 +91,9 @@ export default function LiveIncidentConsolePage() {
                   {incident.status}
                 </span>
               </td>
-              <td>{incident.root_cause ?? '—'}</td>
-              <td>{incident.confidence != null ? `${Math.round(incident.confidence * 100)}%` : '—'}</td>
-              <td>{incident.opened_at}</td>
+              <td>{incident.severity ?? '—'}</td>
+              <td>{incident.affected_region ?? '—'}</td>
+              <td>{incident.started_at}</td>
             </tr>
           ))}
         </tbody>
@@ -80,3 +101,4 @@ export default function LiveIncidentConsolePage() {
     </main>
   );
 }
+
