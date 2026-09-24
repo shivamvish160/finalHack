@@ -274,6 +274,16 @@ resource "google_cloud_run_v2_service" "api_gateway" {
   }
 }
 
+# Public entrypoint for the frontend -- auth is enforced in-app via Firebase
+# ID token verification (services/api-gateway/app/auth.py), not Cloud Run IAM.
+resource "google_cloud_run_v2_service_iam_member" "api_gateway_public" {
+  project  = var.project_id
+  location = var.region
+  name     = google_cloud_run_v2_service.api_gateway.name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
+
 resource "google_cloud_run_v2_service" "demo_target" {
   project  = var.project_id
   location = var.region
@@ -289,6 +299,22 @@ resource "google_cloud_run_v2_service" "demo_target" {
       image = var.container_image_demo_target
     }
   }
+}
+
+# Pub/Sub push subscriptions authenticate as this SA (OIDC) -- it must also
+# hold run.invoker on the 3 orchestrator services it pushes into, or Cloud
+# Run rejects every push delivery with a 403.
+resource "google_cloud_run_v2_service_iam_member" "orchestrator_invoker" {
+  for_each = {
+    alerts     = google_cloud_run_v2_service.orchestrator_alerts.name
+    incidents  = google_cloud_run_v2_service.orchestrator_incidents.name
+    predictive = google_cloud_run_v2_service.orchestrator_predictive.name
+  }
+  project  = var.project_id
+  location = var.region
+  name     = each.value
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.orchestrator.email}"
 }
 
 output "orchestrator_alerts_url" {
