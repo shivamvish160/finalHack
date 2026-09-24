@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.egg-info/
+
+# Node / Next.js
+node_modules/
+frontend/.next/
+frontend/out/
+
+# Terraform
+infra/.terraform/
+infra/**/.terraform/
+*.tfstate
+*.tfstate.*
+tfplan
+crash.log
+
+# Secrets / local env
+.env
+*.pem
+*.key
+
+# OS/editor
+.DS_Store
+Thumbs.db

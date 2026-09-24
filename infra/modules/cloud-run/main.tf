@@ -119,7 +119,7 @@ resource "google_cloud_run_v2_service_iam_member" "orchestrator_can_invoke_demo_
   project  = var.project_id
   location = var.region
   name     = google_cloud_run_v2_service.demo_target.name
-  role     = "roles/run.developer"
+  role     = "roles/run.invoker"
   member   = "serviceAccount:${google_service_account.orchestrator.email}"
 }
 
@@ -153,8 +153,12 @@ resource "google_cloud_run_v2_service" "alert_replay" {
   template {
     service_account = google_service_account.alert_replay.email
     scaling {
+      # MUST stay a singleton: each instance runs its own independent
+      # replay loop at the full target rate (services/alert-replay-service/
+      # app/server.py) -- scaling beyond 1 instance would silently
+      # multiply the alert-arrival rate, not just add capacity.
       min_instance_count = 1
-      max_instance_count = 3
+      max_instance_count = 1
     }
     containers {
       image = var.container_image_alert_replay
@@ -162,26 +166,28 @@ resource "google_cloud_run_v2_service" "alert_replay" {
   }
 }
 
-# T53: per-stage autoscaling, quantified in research.md §17. Cloud Run v2
-# scaling/concurrency is a SERVICE-level setting, so each stage family with
-# a materially different load profile gets its OWN service (same container
-# image, different scaling) rather than one blended "agent-orchestrator"
-# service -- this is the only way to actually realize the research.md §17
-# table's distinct concurrency/min/max values per stage, not just document
-# them as an aspiration.
+# T53: per-stage autoscaling, quantified in research.md §17 -- SCALED DOWN
+# from the original table to fit a fresh/hackathon project's default
+# CpuAllocPerProjectRegion quota (16 vCPU/region; Cloud Run v2 defaults to
+# 1 vCPU/instance when unset, so sum(max_instance_count) across all 6
+# services below must stay comfortably under 16). Request a Cloud Run CPU
+# quota increase (https://cloud.google.com/run/quotas) before relying on
+# this to sustain research.md §17's original >=1,000 msgs/min production
+# targets -- these demo-scale numbers are deliberately conservative.
 
 # Agent 1 (Alert Correlation): highest volume, >=1,000 msgs/min raw alerts.
 resource "google_cloud_run_v2_service" "orchestrator_alerts" {
   project  = var.project_id
   location = var.region
+  deletion_protection = false
   name     = "agent-orchestrator-alerts"
 
   template {
-    service_account = google_service_account.orchestrator.email
+    service_account                  = google_service_account.orchestrator.email
     max_instance_request_concurrency = 20
     scaling {
-      min_instance_count = 2
-      max_instance_count = 50
+      min_instance_count = 1
+      max_instance_count = 6
     }
     containers {
       image = var.container_image_orchestrator
@@ -196,14 +202,15 @@ resource "google_cloud_run_v2_service" "orchestrator_alerts" {
 resource "google_cloud_run_v2_service" "orchestrator_incidents" {
   project  = var.project_id
   location = var.region
+  deletion_protection = false
   name     = "agent-orchestrator-incidents"
 
   template {
-    service_account = google_service_account.orchestrator.email
+    service_account                  = google_service_account.orchestrator.email
     max_instance_request_concurrency = 4
     scaling {
       min_instance_count = 0
-      max_instance_count = 20
+      max_instance_count = 3
     }
     containers {
       image = var.container_image_orchestrator
@@ -216,14 +223,15 @@ resource "google_cloud_run_v2_service" "orchestrator_incidents" {
 resource "google_cloud_run_v2_service" "orchestrator_predictive" {
   project  = var.project_id
   location = var.region
+  deletion_protection = false
   name     = "agent-orchestrator-predictive"
 
   template {
-    service_account = google_service_account.orchestrator.email
+    service_account                  = google_service_account.orchestrator.email
     max_instance_request_concurrency = 4
     scaling {
       min_instance_count = 0
-      max_instance_count = 5
+      max_instance_count = 1
     }
     containers {
       image = var.container_image_orchestrator
@@ -241,7 +249,7 @@ resource "google_cloud_run_v2_service" "api_gateway" {
     service_account = google_service_account.api_gateway.email
     scaling {
       min_instance_count = 0
-      max_instance_count = 10
+      max_instance_count = 2
     }
     containers {
       image = var.container_image_api_gateway
@@ -258,7 +266,7 @@ resource "google_cloud_run_v2_service" "demo_target" {
     service_account = google_service_account.demo_target.email
     scaling {
       min_instance_count = 0
-      max_instance_count = 2
+      max_instance_count = 1
     }
     containers {
       image = var.container_image_demo_target

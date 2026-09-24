@@ -37,7 +37,7 @@ resource "google_cloud_scheduler_job" "predictions_tick" {
 
   http_target {
     http_method = "POST"
-    uri         = "${var.orchestrator_push_endpoint}/stages/predictive-risk"
+    uri         = "${trim(var.orchestrator_push_endpoint, "/")}/stages/predictive-risk"
     oidc_token {
       service_account_email = var.scheduler_service_account_email
     }
@@ -53,15 +53,15 @@ resource "google_cloud_scheduler_job" "bqml_retrain" {
 
   http_target {
     http_method = "POST"
-    uri         = "${var.orchestrator_push_endpoint}/stages/retrain-forecast-model"
+    uri         = "${trim(var.orchestrator_push_endpoint, "/")}/stages/retrain-forecast-model"
     oidc_token {
       service_account_email = var.scheduler_service_account_email
     }
   }
 }
 
-resource "google_service_account" "scheduler" {
-  project      = var.project_id
-  account_id   = "sa-scheduler"
-  display_name = "Cloud Scheduler jobs (predictions.tick, BQML retrain)"
-}
+#resource "google_service_account" "scheduler" {
+ # project      = var.project_id
+ # account_id   = "sa-scheduler"
+ # display_name = "Cloud Scheduler jobs (predictions.tick, BQML retrain)"
+#}

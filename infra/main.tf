@@ -29,6 +29,62 @@ variable "region" {
   type = string
 }
 
+# Enable every mandatory GCP API before any dependent resource is created --
+# a fresh project has none of these on by default, and every module below
+# would otherwise fail on first `terraform apply` with a 403.
+locals {
+  required_apis = [
+    "run.googleapis.com",
+    "pubsub.googleapis.com",
+    "firestore.googleapis.com",
+    "secretmanager.googleapis.com",
+    "cloudscheduler.googleapis.com",
+    "bigquery.googleapis.com",
+    "bigqueryconnection.googleapis.com",
+    "aiplatform.googleapis.com",
+    "iam.googleapis.com",
+    "iamcredentials.googleapis.com",
+    "logging.googleapis.com",
+    "identitytoolkit.googleapis.com", # Firebase Authentication
+    "artifactregistry.googleapis.com",
+    "cloudbuild.googleapis.com", # build-and-push.sh/.ps1 use Cloud Build, not local docker push
+  ]
+}
+
+resource "google_project_service" "required" {
+  for_each                   = toset(local.required_apis)
+  project                    = var.project_id
+  service                    = each.value
+  disable_dependent_services = false
+  disable_on_destroy         = false
+}
+
+# Cloud Build's default service account needs explicit Artifact Registry
+# write access on newer projects (no longer implied by default, per a 2024
+# GCP security change) -- without this, `gcloud builds submit` fails to
+# push the built image even though the build itself succeeds.
+data "google_project" "current" {
+  project_id = var.project_id
+}
+
+resource "google_project_iam_member" "cloudbuild_artifact_registry_writer" {
+  project    = var.project_id
+  role       = "roles/artifactregistry.writer"
+  member     = "serviceAccount:${data.google_project.current.number}@cloudbuild.gserviceaccount.com"
+  depends_on = [google_project_service.required]
+}
+
+# Artifact Registry Docker repo -- Container Registry (gcr.io) is deprecated
+# and unusable on new projects; every service image is pushed/pulled here
+# instead (build-and-push.sh/.ps1 and the container_image_* defaults below).
+resource "google_artifact_registry_repository" "images" {
+  project       = var.project_id
+  location      = var.region
+  repository_id = "sre-incident-platform"
+  format        = "DOCKER"
+  depends_on    = [google_project_service.required]
+}
+
 variable "bq_ml_ops_dataset" {
   type    = string
   default = "sre_ml_ops"
@@ -46,39 +102,42 @@ variable "predictions_tick_schedule_cron" {
 
 variable "container_image_alert_replay" {
   type    = string
-  default = "gcr.io/PROJECT/alert-replay-service:latest"
+  default = "us-central1-docker.pkg.dev/qwiklabs-gcp-03-677e28da7024/sre-incident-platform/alert-replay-service:latest"
 }
 
 variable "container_image_orchestrator" {
   type    = string
-  default = "gcr.io/PROJECT/agent-orchestrator:latest"
+  default = "us-central1-docker.pkg.dev/qwiklabs-gcp-03-677e28da7024/sre-incident-platform/agent-orchestrator:latest"
 }
 
 variable "container_image_api_gateway" {
   type    = string
-  default = "gcr.io/PROJECT/api-gateway:latest"
+  default = "us-central1-docker.pkg.dev/qwiklabs-gcp-03-677e28da7024/sre-incident-platform/api-gateway:latest"
 }
 
 variable "container_image_demo_target" {
   type    = string
-  default = "gcr.io/PROJECT/demo-target-service:latest"
+  default = "us-central1-docker.pkg.dev/qwiklabs-gcp-03-677e28da7024/sre-incident-platform/demo-target-service:latest"
 }
 
 module "secrets" {
   source     = "./modules/secrets"
   project_id = var.project_id
+  depends_on = [google_project_service.required]
 }
 
 module "firestore" {
   source     = "./modules/firestore"
   project_id = var.project_id
   region     = var.region
+  depends_on = [google_project_service.required]
 }
 
 module "bqml" {
   source     = "./modules/bqml"
   project_id = var.project_id
   region     = var.region
+  depends_on = [google_project_service.required]
 }
 
 module "cloud_run" {
@@ -89,25 +148,26 @@ module "cloud_run" {
   container_image_orchestrator = var.container_image_orchestrator
   container_image_api_gateway  = var.container_image_api_gateway
   container_image_demo_target  = var.container_image_demo_target
+  depends_on                   = [google_project_service.required]
 }
 
 module "pubsub" {
-  source                                      = "./modules/pubsub"
-  project_id                                  = var.project_id
-  region                                      = var.region
-  orchestrator_alerts_push_endpoint           = module.cloud_run.orchestrator_alerts_url
-  orchestrator_incidents_push_endpoint        = module.cloud_run.orchestrator_incidents_url
-  orchestrator_predictive_push_endpoint       = module.cloud_run.orchestrator_predictive_url
-  orchestrator_invoker_service_account_email  = module.cloud_run.orchestrator_service_account_email
+  source                                     = "./modules/pubsub"
+  project_id                                 = var.project_id
+  region                                     = var.region
+  orchestrator_alerts_push_endpoint          = module.cloud_run.orchestrator_alerts_url
+  orchestrator_incidents_push_endpoint       = module.cloud_run.orchestrator_incidents_url
+  orchestrator_predictive_push_endpoint      = module.cloud_run.orchestrator_predictive_url
+  orchestrator_invoker_service_account_email = module.cloud_run.orchestrator_service_account_email
 }
 
 module "scheduler" {
-  source                         = "./modules/scheduler"
-  project_id                     = var.project_id
-  region                         = var.region
-  predictions_tick_schedule_cron = var.predictions_tick_schedule_cron
-  bqml_retrain_schedule_cron     = var.bqml_retrain_schedule_cron
-  orchestrator_push_endpoint     = module.cloud_run.orchestrator_predictive_url
+  source                          = "./modules/scheduler"
+  project_id                      = var.project_id
+  region                          = var.region
+  predictions_tick_schedule_cron  = var.predictions_tick_schedule_cron
+  bqml_retrain_schedule_cron      = var.bqml_retrain_schedule_cron
+  orchestrator_push_endpoint      = module.cloud_run.orchestrator_predictive_url
   scheduler_service_account_email = module.cloud_run.orchestrator_service_account_email
 }
 
