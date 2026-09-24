@@ -1,0 +1,76 @@
+"""Custom Pub/Sub-driven agent orchestrator dispatcher (T17).
+
+Composes the 6 ADK agents via plain `LlmAgent` + `Runner.run_async` calls,
+NOT ADK's deprecated `SequentialAgent`/`ParallelAgent`/`LoopAgent`
+(research.md §5, design.md §3.2). Each stage is its own Pub/Sub push
+subscription handler; this module provides the shared "invoke the agent,
+then enforce BigQuery-write-then-Firestore-then-publish-next-event
+ordering" scaffold every stage in services/agent-orchestrator/app/stages/
+builds on.
+"""
+
+from __future__ import annotations
+
+import base64
+import json
+import os
+from dataclasses import dataclass
+from typing import Any, Awaitable, Callable
+
+from fastapi import FastAPI, Request
+from google.cloud import pubsub_v1
+
+StageHandler = Callable[[dict[str, Any]], Awaitable[None]]
+
+
+@dataclass(frozen=True)
+class PubSubPushEnvelope:
+    """Shape of a Cloud Run Pub/Sub push subscription request body."""
+
+    message_id: str
+    publish_time: str
+    data: dict[str, Any]
+    attributes: dict[str, str]
+
+    @classmethod
+    def from_request_body(cls, body: dict[str, Any]) -> "PubSubPushEnvelope":
+        message = body["message"]
+        raw_data = base64.b64decode(message.get("data", "")).decode("utf-8") if message.get("data") else "{}"
+        return cls(
+            message_id=message["messageId"],
+            publish_time=message["publishTime"],
+            data=json.loads(raw_data),
+            attributes=message.get("attributes", {}),
+        )
+
+
+class StageOrchestrator:
+    """Registers one FastAPI POST route per Pub/Sub push subscription.
+
+    Each registered `handler` is responsible for its own
+    BigQuery-write -> Firestore-projection -> publish-next-event ordering
+    (design.md §3.2/§8); this class only handles envelope decoding, ack
+    semantics, and next-topic publishing so every stage doesn't repeat that
+    boilerplate.
+    """
+
+    def __init__(self, app: FastAPI, project_id: str | None = None) -> None:
+        self._app = app
+        self._project_id = project_id or os.environ["GCP_PROJECT_ID"]
+        self._publisher = pubsub_v1.PublisherClient()
+
+    def register_stage(self, route_path: str, handler: StageHandler) -> None:
+        @self._app.post(route_path)
+        async def _endpoint(request: Request) -> dict[str, str]:  # noqa: ANN202
+            body = await request.json()
+            envelope = PubSubPushEnvelope.from_request_body(body)
+            await handler(envelope.data)
+            # Returning 200 acks the message; an unhandled exception in
+            # `handler` propagates as a 500, triggering Pub/Sub redelivery
+            # and eventually the topic's -dlq after 5 attempts (NFR-012).
+            return {"status": "ok"}
+
+    def publish(self, topic_name: str, payload: dict[str, Any]) -> str:
+        topic_path = self._publisher.topic_path(self._project_id, topic_name)
+        future = self._publisher.publish(topic_path, json.dumps(payload).encode("utf-8"))
+        return future.result()

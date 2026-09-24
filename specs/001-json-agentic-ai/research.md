@@ -221,9 +221,14 @@ reality rather than memory.
   primary because it is a managed foundation model without a confirmed
   `ML.EXPLAIN_FORECAST`-equivalent rationale output, and NFR-010 is a hard
   requirement here. Worth revisiting if `AI.FORECAST` gains an
-  explainability output. Retraining runs on a Cloud Scheduler cadence
-  (symbolic at ~3,000 static rows, but demonstrates the mandated
-  automation).
+  explainability output. **Retrain cadence (fixed, T6)**: Cloud Scheduler
+  retrains `sre_ml_ops.alert_trend_forecast_model` every 15 minutes
+  (`*/15 * * * *`, `infra/environments/demo/terraform.tfvars`
+  `bqml_retrain_schedule_cron`), and `predictions.tick` fires every 2
+  minutes (`predictions_tick_schedule_cron`) — both comfortably inside a
+  single demo replay run, so a forecast can reliably precede its
+  corresponding replayed alert (AC-4.1). This resolves
+  checklists/architecture.md CHK034 and design.md §11 risk #2.
 
 ## 7. Network topology "dependency" — flagged assumption (no explicit edge column)
 

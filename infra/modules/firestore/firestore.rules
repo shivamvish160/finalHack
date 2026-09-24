@@ -1,0 +1,30 @@
+rules_version = '2';
+
+// T9: security rules for approvals/, predictions/, executive_metrics/,
+// pending_alerts/ -- the only 4 collections this platform ever writes.
+// End-user writes always go through api-gateway (never direct client
+// writes to approvals/predictions/executive_metrics); clients only READ.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /approvals/{actionId} {
+      allow read: if request.auth != null;
+      allow write: if false; // api-gateway uses the Admin SDK, bypassing rules
+    }
+
+    match /predictions/{predictionId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    match /executive_metrics/{docId} {
+      allow read: if request.auth != null
+        && request.auth.token.role in ["ExecutiveViewer", "IncidentCommander", "Administrator"];
+      allow write: if false;
+    }
+
+    match /pending_alerts/{clusterKey} {
+      allow read, write: if false; // internal orchestrator state only, Admin SDK access
+    }
+  }
+}
