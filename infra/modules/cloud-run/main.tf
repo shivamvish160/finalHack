@@ -162,6 +162,10 @@ resource "google_cloud_run_v2_service" "alert_replay" {
     }
     containers {
       image = var.container_image_alert_replay
+      env {
+        name  = "GCP_PROJECT_ID"
+        value = var.project_id
+      }
     }
   }
 }
@@ -191,6 +195,10 @@ resource "google_cloud_run_v2_service" "orchestrator_alerts" {
     }
     containers {
       image = var.container_image_orchestrator
+      env {
+        name  = "GCP_PROJECT_ID"
+        value = var.project_id
+      }
     }
   }
 }
@@ -213,6 +221,10 @@ resource "google_cloud_run_v2_service" "orchestrator_incidents" {
     }
     containers {
       image = var.container_image_orchestrator
+      env {
+        name  = "GCP_PROJECT_ID"
+        value = var.project_id
+      }
     }
   }
 }
@@ -233,6 +245,10 @@ resource "google_cloud_run_v2_service" "orchestrator_predictive" {
     }
     containers {
       image = var.container_image_orchestrator
+      env {
+        name  = "GCP_PROJECT_ID"
+        value = var.project_id
+      }
     }
   }
 }
@@ -250,6 +266,10 @@ resource "google_cloud_run_v2_service" "api_gateway" {
     }
     containers {
       image = var.container_image_api_gateway
+      env {
+        name  = "GCP_PROJECT_ID"
+        value = var.project_id
+      }
     }
   }
 }
