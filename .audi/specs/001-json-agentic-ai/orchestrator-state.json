@@ -1,0 +1,47 @@
+{
+  "schema_version": "1.0",
+  "feature_name": "001-json-agentic-ai",
+  "feature_dir": "C:\\Users\\shgi10154\\Documents\\Hack\\.audi\\specs\\001-json-agentic-ai",
+  "branch_name": "001-json-agentic-ai",
+  "started_at": "",
+  "updated_at": "2026-09-24T06:57:43.396927+00:00",
+  "current_phase": 4,
+  "review_model": null,
+  "context_summary": "status=created | graph=C:/Users/shgi10154/Documents/Hack/graphify-out/graph.json | files=.audi/scripts/powershell/Install-audi.ps1,.audi/scripts/powershell/check-prerequisites.ps1,.audi/scripts/powershell/common.ps1,.audi/scripts/powershell",
+  "graphify_evidence": "status=created | graph=C:/Users/shgi10154/Documents/Hack/graphify-out/graph.json | files=.audi/scripts/powershell/Install-audi.ps1,.audi/scripts/powershell/check-prerequisites.ps1,.audi/scripts/powershell/common.ps1,.audi/scripts/powershell",
+  "budget_summary": {},
+  "tier": "FULL",
+  "ceiling_events": [],
+  "run_id": "a198d541-35a4-4078-a57c-06aaacff9502",
+  "active_model": null,
+  "phases": {
+    "1": {
+      "status": "completed",
+      "started_at": "2026-09-24T06:27:16.344097+00:00",
+      "completed_at": "2026-09-24T06:27:16.344097+00:00",
+      "summary": null,
+      "artifact_paths": [],
+      "iterations": 1,
+      "model": null
+    },
+    "2": {
+      "status": "completed",
+      "started_at": "2026-09-24T06:34:18.644596+00:00",
+      "completed_at": "2026-09-24T06:34:18.644596+00:00",
+      "summary": null,
+      "artifact_paths": [],
+      "iterations": 1,
+      "model": null
+    },
+    "3": {
+      "status": "completed",
+      "started_at": "2026-09-24T06:57:43.396904+00:00",
+      "completed_at": "2026-09-24T06:57:43.396904+00:00",
+      "summary": null,
+      "artifact_paths": [],
+      "iterations": 1,
+      "model": null
+    }
+  },
+  "task_states": {}
+}

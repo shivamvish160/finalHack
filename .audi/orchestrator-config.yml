@@ -7,7 +7,7 @@ verify:
   auto_prompt_install: true
   install_url: ''
 subagents:
-  enabled: false
+  enabled: true
   max_concurrency: 2
   review_pipeline: true
   max_review_iterations: 3

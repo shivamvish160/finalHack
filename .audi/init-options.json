@@ -1,0 +1,13 @@
+{
+  "ai": "copilot",
+  "ai_commands_dir": null,
+  "ai_skills": false,
+  "audi_version": "1.0.4",
+  "branch_numbering": "sequential",
+  "here": true,
+  "offline": false,
+  "preset": null,
+  "script": "ps",
+  "skills_repo": null,
+  "skills_team": null
+}
