@@ -96,7 +96,7 @@ def fetch_precedent_incidents(bq_client: BigQueryClient, node_ids: list[str], se
         JOIN `sre_telemetry.alert_stream` AS al ON al.alert_id = ca.alert_id
         JOIN `sre_incident_mart.incidents` AS i ON i.incident_id = ca.incident_id
         WHERE al.node_id IN UNNEST(@node_ids) OR al.service_name IN UNNEST(@service_names)
-        ORDER BY i.opened_at DESC
+        ORDER BY i.started_at DESC
     """
     return bq_client.query_json_rows(
         sql,

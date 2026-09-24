@@ -89,7 +89,7 @@ def _write_incident_and_correlations(
         USING (SELECT @incident_id AS incident_id) S
         ON T.incident_id = S.incident_id
         WHEN NOT MATCHED THEN
-          INSERT (incident_id, status, opened_at)
+          INSERT (incident_id, status, started_at)
           VALUES (@incident_id, @initial_status, CURRENT_TIMESTAMP())
     """
     bq_client.query(

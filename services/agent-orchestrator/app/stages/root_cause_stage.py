@@ -15,6 +15,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
 from agents.common.bq_client import BigQueryClient, param  # noqa: E402
+from agents.common.firestore_client import FirestoreClient  # noqa: E402
 from agents.root_cause_analysis.agent import (  # noqa: E402
     fetch_root_cause_evidence,
     summarize_confidence,
@@ -24,28 +25,29 @@ from agents.root_cause_analysis.agent import (  # noqa: E402
 async def handle_incidents_correlated(payload: dict[str, Any]) -> dict[str, Any]:
     incident_id = payload["incidentId"]
     bq_client = BigQueryClient()
+    firestore_client = FirestoreClient()
 
     evidence = fetch_root_cause_evidence(bq_client, incident_id)
     confidence = summarize_confidence(evidence)
     root_cause, reasoning = _summarize_root_cause(evidence)
 
-    update_sql = """
-        UPDATE `sre_incident_mart.incidents`
-        SET root_cause = @root_cause,
-            root_cause_confidence = @confidence,
-            root_cause_reasoning = @reasoning,
-            status = @status
-        WHERE incident_id = @incident_id
-    """
+    # sre_incident_mart.incidents (real schema, INFORMATION_SCHEMA-verified)
+    # has no root_cause/root_cause_confidence/root_cause_reasoning columns --
+    # those live in Firestore instead (agents/common/firestore_client.py);
+    # only `status` is a real column here.
     bq_client.query(
-        update_sql,
+        """
+        UPDATE `sre_incident_mart.incidents`
+        SET status = @status
+        WHERE incident_id = @incident_id
+        """,
         [
-            param("root_cause", "STRING", root_cause),
-            param("confidence", "FLOAT64", confidence),
-            param("reasoning", "STRING", reasoning),
             param("status", "STRING", "Investigating"),
             param("incident_id", "STRING", incident_id),
         ],
+    )
+    firestore_client.upsert_incident_projection(
+        incident_id, {"rootCause": root_cause, "rootCauseConfidence": confidence, "rootCauseReasoning": reasoning}
     )
 
     return {

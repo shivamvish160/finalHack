@@ -85,7 +85,7 @@ async def handle_risk_forecast_created(_payload: dict[str, Any]) -> None:
 def _incident_duration_hours(bq_client: BigQueryClient, incident_id: str) -> float:
     rows = bq_client.query_json_rows(
         """
-        SELECT TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), opened_at, MINUTE) / 60.0 AS duration_hours
+        SELECT TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), started_at, MINUTE) / 60.0 AS duration_hours
         FROM `sre_incident_mart.incidents`
         WHERE incident_id = @incident_id
         """,

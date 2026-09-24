@@ -63,7 +63,7 @@ def compute_mttr_reduction(bq_client: BigQueryClient) -> dict[str, float]:
     """FR-028: MTTR for platform-handled incidents vs. the historical
     baseline reflected in existing incidents/remediation_logs."""
     sql = """
-        SELECT AVG(TIMESTAMP_DIFF(resolved_at, opened_at, MINUTE)) AS avg_mttr_minutes
+        SELECT AVG(TIMESTAMP_DIFF(resolved_at, started_at, MINUTE)) AS avg_mttr_minutes
         FROM `sre_incident_mart.incidents`
         WHERE resolved_at IS NOT NULL
     """

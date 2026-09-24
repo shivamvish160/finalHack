@@ -24,6 +24,12 @@ class FirestoreClient:
     PREDICTIONS = "predictions"
     EXECUTIVE_METRICS = "executive_metrics"
     PENDING_ALERTS = "pending_alerts"
+    # Not one of the original 4 collections -- added because the real
+    # sre_incident_mart.incidents table (INFORMATION_SCHEMA-verified) has no
+    # root_cause/root_cause_confidence/root_cause_reasoning columns at all,
+    # and the existing warehouse schema must never be altered. This is a
+    # Firestore-only projection, never a substitute system of record.
+    INCIDENT_PROJECTIONS = "incident_projections"
 
     def __init__(self, project_id: str | None = None) -> None:
         self._project_id = project_id or os.environ["GCP_PROJECT_ID"]
@@ -65,6 +71,18 @@ class FirestoreClient:
                 "status": "Executed" if success else "ExecutionFailed",
             }
         )
+
+    # ── Incident projections (root_cause fields not present in the real
+    # sre_incident_mart.incidents schema) ──
+
+    def upsert_incident_projection(self, incident_id: str, fields: dict[str, Any]) -> None:
+        self._client.collection(self.INCIDENT_PROJECTIONS).document(incident_id).set(
+            {**fields, "updatedAt": _now()}, merge=True
+        )
+
+    def get_incident_projection(self, incident_id: str) -> dict[str, Any] | None:
+        snap = self._client.collection(self.INCIDENT_PROJECTIONS).document(incident_id).get()
+        return snap.to_dict() if snap.exists else None
 
     # ── Predictions (design.md §3.2 row 4 -- Firestore-only, no BQ write) ──
 

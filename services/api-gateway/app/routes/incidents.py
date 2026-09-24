@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[5]))
 
 from agents.common.audit_log import log_incident_access  # noqa: E402
 from agents.common.bq_client import BigQueryClient, param  # noqa: E402
+from agents.common.firestore_client import FirestoreClient  # noqa: E402
 from agents.common.redaction import redact  # noqa: E402
 from agents.runbook_retrieval.agent import build_match_response, find_matching_runbooks  # noqa: E402
 
@@ -37,10 +38,10 @@ async def list_incidents(
 ) -> list[dict[str, Any]]:
     where_clause = "" if status == "all" else "WHERE status = @status"
     sql = f"""
-        SELECT incident_id, status, opened_at, root_cause, root_cause_confidence AS confidence
+        SELECT incident_id, title, status, severity, affected_region, started_at, resolved_at
         FROM `sre_incident_mart.incidents`
         {where_clause}
-        ORDER BY opened_at DESC
+        ORDER BY started_at DESC
         LIMIT 200
     """
     params = [] if status == "all" else [param("status", "STRING", status)]
@@ -52,8 +53,7 @@ async def list_incidents(
 @router.get("/{incident_id}")
 async def get_incident(incident_id: str, user: AuthenticatedUser = Depends(get_current_user)) -> dict[str, Any]:
     sql = """
-        SELECT incident_id, status, opened_at, resolved_at, root_cause,
-               root_cause_confidence AS confidence, root_cause_reasoning AS reasoning
+        SELECT incident_id, title, status, severity, affected_region, started_at, resolved_at
         FROM `sre_incident_mart.incidents`
         WHERE incident_id = @incident_id
     """
@@ -62,8 +62,14 @@ async def get_incident(incident_id: str, user: AuthenticatedUser = Depends(get_c
     if not rows:
         return {"error": {"code": "not_found", "message": "Incident not found"}}
     incident = rows[0]
-    incident["reasoning"] = redact(incident.get("reasoning"))
-    incident["root_cause"] = redact(incident.get("root_cause"))  # TD-7: root_cause may echo raw alert/runbook text
+
+    # root_cause/confidence/reasoning have no column in the real
+    # sre_incident_mart.incidents schema -- they live in Firestore instead
+    # (services/agent-orchestrator/app/stages/root_cause_stage.py).
+    projection = FirestoreClient().get_incident_projection(incident_id) or {}
+    incident["root_cause"] = redact(projection.get("rootCause"))  # TD-7: root_cause may echo raw alert/runbook text
+    incident["confidence"] = projection.get("rootCauseConfidence")
+    incident["reasoning"] = redact(projection.get("rootCauseReasoning"))
     return incident
 
 
