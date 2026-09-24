@@ -71,6 +71,14 @@ resource "google_project_iam_member" "alert_replay_bq_viewer" {
   member  = "serviceAccount:${google_service_account.alert_replay.email}"
 }
 
+# roles/bigquery.dataViewer alone lets it read table data but NOT run a
+# query job -- without this, every query returns 403 "bigquery.jobs.create".
+resource "google_project_iam_member" "alert_replay_bq_job_user" {
+  project = var.project_id
+  role    = "roles/bigquery.jobUser"
+  member  = "serviceAccount:${google_service_account.alert_replay.email}"
+}
+
 resource "google_project_iam_member" "alert_replay_pubsub_publisher" {
   project = var.project_id
   role    = "roles/pubsub.publisher"
@@ -144,6 +152,16 @@ resource "google_project_iam_member" "api_gateway_firestore_user" {
 resource "google_project_iam_member" "api_gateway_bq_viewer" {
   project = var.project_id
   role    = "roles/bigquery.dataViewer"
+  member  = "serviceAccount:${google_service_account.api_gateway.email}"
+}
+
+# roles/bigquery.dataViewer alone lets it read table data but NOT run a
+# query job -- without this, every query returns 403
+# "bigquery.jobs.create" (BigQueryClient.query always runs a query job,
+# even for simple SELECTs).
+resource "google_project_iam_member" "api_gateway_bq_job_user" {
+  project = var.project_id
+  role    = "roles/bigquery.jobUser"
   member  = "serviceAccount:${google_service_account.api_gateway.email}"
 }
 
