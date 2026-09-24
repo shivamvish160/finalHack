@@ -280,6 +280,10 @@ resource "google_cloud_run_v2_service" "api_gateway" {
         name  = "GCP_PROJECT_ID"
         value = var.project_id
       }
+      env {
+        name  = "FRONTEND_ORIGIN"
+        value = google_cloud_run_v2_service.frontend.uri
+      }
     }
   }
 }
