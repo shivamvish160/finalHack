@@ -70,10 +70,10 @@ async def decide_approval(
     if approval is None:
         raise HTTPException(404, detail="Approval action not found")
 
-    firestore_client.decide_approval(action_id, body.decision, user.uid, body.comments)
+    decided_at = firestore_client.decide_approval(action_id, body.decision, user.uid, body.comments)
     log_approval_decision(user.uid, action_id, approval["incidentId"], body.decision, body.comments)
 
     topic = "remediation.approved" if body.decision == "approve" else "remediation.rejected"
     _publish(topic, {"incidentId": approval["incidentId"], "payload": {"actionId": action_id}})
 
-    return {"actionId": action_id, "decision": body.decision, "decidedAt": None}
+    return {"actionId": action_id, "decision": body.decision, "decidedAt": decided_at.isoformat()}

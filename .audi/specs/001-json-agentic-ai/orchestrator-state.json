@@ -4,8 +4,8 @@
   "feature_dir": "C:\\Users\\shgi10154\\Documents\\Hack\\.audi\\specs\\001-json-agentic-ai",
   "branch_name": "001-json-agentic-ai",
   "started_at": "",
-  "updated_at": "2026-09-24T12:06:51.593674+00:00",
-  "current_phase": 10,
+  "updated_at": "2026-09-24T12:47:56.267938+00:00",
+  "current_phase": 12,
   "review_model": null,
   "context_summary": "status=refreshed | graph=C:/Users/shgi10154/Documents/Hack/graphify-out/graph.json | files=.audi/evals/001-json-agentic-ai/2026-09-24T06-27-21.612520+00-00.md,.audi/evals/001-json-agentic-ai/2026-09-24T06-27-27.147353+00-00.md,.audi/evals/0",
   "graphify_evidence": "status=refreshed | graph=C:/Users/shgi10154/Documents/Hack/graphify-out/graph.json | files=.audi/evals/001-json-agentic-ai/2026-09-24T06-27-21.612520+00-00.md,.audi/evals/001-json-agentic-ai/2026-09-24T06-27-27.147353+00-00.md,.audi/evals/0",
@@ -97,21 +97,21 @@
       "model": null
     },
     "10": {
-      "status": "not-started",
-      "started_at": null,
-      "completed_at": null,
+      "status": "completed",
+      "started_at": "2026-09-24T12:38:21.197669+00:00",
+      "completed_at": "2026-09-24T12:38:21.197669+00:00",
       "summary": null,
       "artifact_paths": [],
-      "iterations": 0,
+      "iterations": 1,
       "model": null
     },
     "11": {
-      "status": "not-started",
-      "started_at": null,
-      "completed_at": null,
+      "status": "completed",
+      "started_at": "2026-09-24T12:47:56.267907+00:00",
+      "completed_at": "2026-09-24T12:47:56.267907+00:00",
       "summary": null,
       "artifact_paths": [],
-      "iterations": 0,
+      "iterations": 1,
       "model": null
     },
     "12": {

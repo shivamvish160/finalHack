@@ -85,12 +85,27 @@ def execute_remediation(
     import requests  # local import: only needed on the real-execution path
 
     demo_target_url = os.environ["DEMO_TARGET_SERVICE_URL"]
+    id_token = _fetch_identity_token(audience=demo_target_url)
     response = requests.post(
         f"{demo_target_url}/remediate",
         json={"actionId": action_id, "incidentId": incident_id, "command": fix_script},
+        headers={"Authorization": f"Bearer {id_token}"},
         timeout=30,
     )
     return {"success": response.ok, "detail": response.text[:500]}
+
+
+def _fetch_identity_token(audience: str) -> str:
+    """Google-signed OIDC identity token authenticating this call as
+    `sa-agent-orchestrator` -- Cloud Run rejects unauthenticated ingress to
+    `demo-target-service` (IAM binding in infra/modules/cloud-run limits
+    invocation to this service account only), so every real execution call
+    MUST carry this token (TD-2 fix)."""
+    import google.auth.transport.requests
+    import google.oauth2.id_token
+
+    auth_request = google.auth.transport.requests.Request()
+    return google.oauth2.id_token.fetch_id_token(auth_request, audience)
 
 
 def build_agent():

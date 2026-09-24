@@ -102,7 +102,7 @@ flowchart TD
 - **alert-replay-service** — the only reader of `alert_stream` at the raw-row level; loops over the ~3,000 rows (ordered by `timestamp`) at a controlled rate to sustain ≥1,000 msgs/min, wrapping each occurrence in an `alerts.replay` envelope with a fresh `replayEventId` (UUID) and rewritten `occurredAt` (FR-004; never mutates the source table).
 - **agent-orchestrator** — hosts all 6 ADK agents behind independent Pub/Sub push subscriptions; a custom orchestrator layer invokes `Runner.run_async(...)` per stage, writes BigQuery (if the stage owns one of the 4 FR-039 tables) then Firestore then publishes the next event, and autoscales independently per stage to absorb the alert burst (NFR-001/002).
 - **api-gateway** — Backend-for-Frontend for all 8 UI pages; verifies Firebase ID tokens and enforces custom-claim RBAC (FR-035); the **only** code path that can publish `remediation.approved`/`remediation.rejected` (never the LLM's own judgement, NFR-009); writes a Cloud Logging audit entry for every security-relevant request (FR-037).
-- **demo-target-service** — isolated, low-privilege Cloud Run service that is the literal target of real remediation execution (Cloud Run Admin API traffic-split/restart/scale calls, and their reverse as rollback); contains blast radius to a purpose-built service, never production infrastructure.
+- **demo-target-service** — isolated, low-privilege Cloud Run service that is the literal target of real remediation execution (an authenticated, Google-signed-OIDC-token HTTP call to its own `/remediate`/`/rollback` endpoints — the real GCP-native mechanism for one Cloud Run service to securely invoke another, enforced by Cloud Run IAM ingress control, not a literal Cloud Run Admin API call); contains blast radius to a purpose-built service, never production infrastructure.
 
 ### 3.2 ADK Agents & Warehouse Query Patterns
 
@@ -206,7 +206,7 @@ sequenceDiagram
     GW->>FS: update approvals/{actionId} (approver uid, decision, comments, timestamp)
     GW->>PS: publish remediation.approved (only path to execution)
     PS->>A5: remediation.approved
-    A5->>Sandbox: real Cloud Run Admin API call
+    A5->>Sandbox: authenticated HTTP call (OIDC identity token)
     Sandbox-->>A5: execution result (exit status)
     A5->>BQ: append remediation_logs (real outcome)
     A5->>PS: publish remediation.executed
@@ -323,7 +323,7 @@ A shared redaction utility runs at **read/output time** on every free-text wareh
 | Agent orchestration | Custom Pub/Sub-driven orchestrator calling `LlmAgent` + `Runner` per stage | `Sequential/Parallel/LoopAgent` are deprecated upstream; matches independently-scalable Cloud Run shape | ADK `SequentialAgent`/`ParallelAgent`/`LoopAgent` (deprecated) |
 | BigQuery write scope | Confined to exactly `correlated_alerts`/`incidents`/`remediation_logs`/`incident_postmortems` (FR-039) | Everything else (approvals, predictions, executive metrics) lives in Firestore/Cloud Logging | Inventing new BigQuery tables for every platform artifact (violates FR-001/FR-039, adds complexity) |
 | Human approval gate | Physically separate propose vs. execute tools; execute reachable only via `api-gateway`'s authenticated decision endpoint | Structural enforcement of NFR-009 rather than a prompt instruction | Trusting the LLM's own judgement / prompt-only gate |
-| Sandbox execution target | Dedicated `demo-target-service` Cloud Run service, isolated SA, real Cloud Run Admin API calls | Real execution (Clarification) while containing blast radius | Simulated/mocked execution result (excluded by clarification) |
+| Sandbox execution target | Dedicated `demo-target-service` Cloud Run service, isolated SA, real authenticated HTTP calls (Google-signed OIDC identity token via `google.oauth2.id_token.fetch_id_token`, enforced by Cloud Run IAM ingress) | Real execution (Clarification) while containing blast radius; the OIDC-token pattern is the actual GCP mechanism for private-service-to-service calls, not a literal Cloud Run Admin API call | Simulated/mocked execution result (excluded by clarification); unauthenticated HTTP (rejected by Cloud Run IAM, and a security regression) |
 | Auth/RBAC | Firebase Authentication custom claims (5 roles); GCP IAM kept separate | Clean separation of human RBAC vs. service-to-service IAM | GCP IAM alone for end users |
 | Frontend | Next.js (App Router) + Firebase JS SDK realtime listeners + typed REST client for BQ-backed drill-downs | Realtime feel for the Live Incident Console; REST for analytical/BQ views | Pure REST/polling everywhere (loses realtime feel) |
 

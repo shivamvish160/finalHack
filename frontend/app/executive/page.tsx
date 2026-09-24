@@ -8,6 +8,7 @@ interface ExecutiveMetrics {
   revenueAtRisk?: number;
   slaCreditExposure?: number;
   averageMttrMinutes?: number;
+  resolutionSuccessRatePct?: number;
   predictedIncidentCount?: number;
 }
 
@@ -35,6 +36,7 @@ export default function ExecutiveDashboardPage() {
     { label: 'Affected Customers', value: metrics.affectedCustomers ?? '—' },
     { label: 'Affected Users', value: metrics.affectedUsers ?? '—' },
     { label: 'Avg. MTTR (minutes)', value: metrics.averageMttrMinutes != null ? Math.round(metrics.averageMttrMinutes) : '—' },
+    { label: 'Resolution Success Rate', value: metrics.resolutionSuccessRatePct != null ? `${metrics.resolutionSuccessRatePct}%` : '—' },
     { label: 'Predicted Incidents', value: metrics.predictedIncidentCount ?? '—' },
   ];
 

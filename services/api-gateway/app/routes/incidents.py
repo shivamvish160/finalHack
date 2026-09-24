@@ -63,6 +63,7 @@ async def get_incident(incident_id: str, user: AuthenticatedUser = Depends(get_c
         return {"error": {"code": "not_found", "message": "Incident not found"}}
     incident = rows[0]
     incident["reasoning"] = redact(incident.get("reasoning"))
+    incident["root_cause"] = redact(incident.get("root_cause"))  # TD-7: root_cause may echo raw alert/runbook text
     return incident
 
 

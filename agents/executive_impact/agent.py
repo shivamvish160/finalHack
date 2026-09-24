@@ -71,6 +71,25 @@ def compute_mttr_reduction(bq_client: BigQueryClient) -> dict[str, float]:
     return {"averageMttrMinutes": (rows[0].get("avg_mttr_minutes") if rows else None) or 0.0}
 
 
+def compute_resolution_success_rate(bq_client: BigQueryClient) -> dict[str, float]:
+    """FR-029/AC-4.3: resolution success rate -- the share of appended
+    remediation_logs outcomes that succeeded, data-derived from the
+    existing warehouse (never a hardcoded percentage, NFR-011)."""
+    sql = """
+        SELECT
+          COUNTIF(outcome = 'Succeeded') AS succeeded_count,
+          COUNT(*) AS total_count
+        FROM `sre_incident_mart.remediation_logs`
+    """
+    rows = bq_client.query_json_rows(sql)
+    if not rows or not rows[0].get("total_count"):
+        return {"resolutionSuccessRatePct": 0.0}
+
+    succeeded = rows[0]["succeeded_count"] or 0
+    total = rows[0]["total_count"]
+    return {"resolutionSuccessRatePct": round((succeeded / total) * 100, 1)}
+
+
 def build_postmortem_merge_params(
     incident_id: str,
     root_cause_summary: str,

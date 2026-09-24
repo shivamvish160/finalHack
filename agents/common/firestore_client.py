@@ -45,16 +45,18 @@ class FirestoreClient:
 
     def decide_approval(
         self, action_id: str, decision: str, approver_uid: str, comments: str = ""
-    ) -> None:
+    ) -> datetime:
+        decided_at = _now()
         self._client.collection(self.APPROVALS).document(action_id).update(
             {
                 "status": "Approved" if decision == "approve" else "Rejected",
                 "approverUid": approver_uid,
                 "decision": decision,
                 "comments": comments,
-                "decidedAt": _now(),
+                "decidedAt": decided_at,
             }
         )
+        return decided_at
 
     def record_execution_result(self, action_id: str, success: bool, detail: str) -> None:
         self._client.collection(self.APPROVALS).document(action_id).update(

@@ -13,8 +13,12 @@ $services = @(
 
 foreach ($svc in $services) {
     $image = "gcr.io/$($env:GCP_PROJECT_ID)/$($svc.Name):latest"
-    Write-Host "Building $image ..."
-    docker build -t $image (Join-Path $repoRoot $svc.Path)
+    $dockerfile = Join-Path $repoRoot "$($svc.Path)/Dockerfile"
+    Write-Host "Building $image (context: repo root, file: $dockerfile) ..."
+    # Build context is the REPO ROOT, not the service subfolder -- every
+    # service's Dockerfile COPYs the shared agents/ package, which only
+    # exists outside services/<name>/ (TD-1 fix).
+    docker build -f $dockerfile -t $image $repoRoot
     Write-Host "Pushing $image ..."
     docker push $image
 }
