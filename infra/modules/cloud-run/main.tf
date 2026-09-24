@@ -284,6 +284,12 @@ resource "google_cloud_run_v2_service" "api_gateway" {
         name  = "FRONTEND_ORIGIN"
         value = google_cloud_run_v2_service.frontend.uri
       }
+      # Demo-only: bypasses real Firebase Auth verification (see auth.py).
+      # Remove/set to "false" once Firebase Auth is provisioned for real use.
+      env {
+        name  = "DEMO_AUTH_BYPASS"
+        value = "true"
+      }
     }
   }
 }

@@ -8,6 +8,7 @@ separately -- this module governs only END-USER access.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Callable
 
@@ -43,16 +44,27 @@ async def get_current_user(request: Request) -> AuthenticatedUser:
 
     Raises 401 if the token is missing/invalid, per NFR-005 ("no anonymous
     access to incident or business-impact data").
-    """
-    _ensure_firebase_app_initialized()
 
+    DEMO_AUTH_BYPASS=true skips real Firebase verification and instead
+    trusts the bearer token as a literal role name (demo/hackathon use
+    only when Firebase Auth can't be provisioned -- e.g. Qwiklabs console
+    access restrictions). Never enable this in a real deployment: it grants
+    any caller any role with zero identity verification.
+    """
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token")
 
-    id_token = auth_header.removeprefix("Bearer ").strip()
+    token = auth_header.removeprefix("Bearer ").strip()
+
+    if os.environ.get("DEMO_AUTH_BYPASS") == "true":
+        if token not in ALL_ROLES:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid demo role token")
+        return AuthenticatedUser(uid=f"demo-{token.lower()}", role=token, display_name=token)
+
+    _ensure_firebase_app_initialized()
     try:
-        decoded = firebase_auth.verify_id_token(id_token)
+        decoded = firebase_auth.verify_id_token(token)
     except Exception as exc:  # noqa: BLE001 - any verification failure is a 401
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token") from exc
 

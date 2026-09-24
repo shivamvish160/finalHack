@@ -44,7 +44,13 @@ export function RoleGatedNav() {
           {item.label}
         </a>
       ))}
-      {user && <span className="ml-auto text-sm text-gray-400">{user.role}</span>}
+      {user ? (
+        <span className="ml-auto text-sm text-gray-400">{user.role}</span>
+      ) : (
+        <a href="/login" className="ml-auto text-sm font-medium text-blue-600">
+          Sign In
+        </a>
+      )}
     </nav>
   );
 }
