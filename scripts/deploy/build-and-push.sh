@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# T67: build + push all 4 Cloud Run service container images.
+# T67: build + push all 5 Cloud Run service container images.
 # Uses Cloud Build (gcloud builds submit) rather than local `docker build`/
 # `docker push` -- Cloud Build runs entirely inside Google's network, so it
 # sidesteps Cloud Shell's local Docker daemon / outbound-network flakiness
@@ -55,4 +55,36 @@ EOF
     --region="$GCP_REGION"
 done
 
-echo "All 4 service images built and pushed to ${AR_HOST}/${GCP_PROJECT_ID}/${AR_REPO}."
+# Frontend: NEXT_PUBLIC_* vars are baked into the JS bundle at build time,
+# not runtime env vars -- set these before running this script, typically
+# to the api-gateway URL from a prior `terraform apply`. Its build context
+# is frontend/ itself (not REPO_ROOT), since it has no dependency on agents/.
+frontend_image="${AR_HOST}/${GCP_PROJECT_ID}/${AR_REPO}/frontend:latest"
+frontend_cloudbuild_yaml="${TMP_DIR}/cloudbuild-frontend.yaml"
+cat > "$frontend_cloudbuild_yaml" <<EOF
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args:
+    - 'build'
+    - '-f'
+    - 'Dockerfile'
+    - '--build-arg'
+    - 'NEXT_PUBLIC_API_GATEWAY_URL=${NEXT_PUBLIC_API_GATEWAY_URL:-}'
+    - '--build-arg'
+    - 'NEXT_PUBLIC_FIREBASE_API_KEY=${NEXT_PUBLIC_FIREBASE_API_KEY:-}'
+    - '--build-arg'
+    - 'NEXT_PUBLIC_FIREBASE_PROJECT_ID=${NEXT_PUBLIC_FIREBASE_PROJECT_ID:-}'
+    - '-t'
+    - '${frontend_image}'
+    - '.'
+images:
+- '${frontend_image}'
+EOF
+
+echo "Building + pushing ${frontend_image} via Cloud Build ..."
+gcloud builds submit "$REPO_ROOT/frontend" \
+  --config="$frontend_cloudbuild_yaml" \
+  --project="$GCP_PROJECT_ID" \
+  --region="$GCP_REGION"
+
+echo "All 5 service images built and pushed to ${AR_HOST}/${GCP_PROJECT_ID}/${AR_REPO}."

@@ -120,6 +120,11 @@ variable "container_image_demo_target" {
   default = "us-central1-docker.pkg.dev/qwiklabs-gcp-03-677e28da7024/sre-incident-platform/demo-target-service:latest"
 }
 
+variable "container_image_frontend" {
+  type    = string
+  default = "us-central1-docker.pkg.dev/qwiklabs-gcp-03-677e28da7024/sre-incident-platform/frontend:latest"
+}
+
 module "secrets" {
   source     = "./modules/secrets"
   project_id = var.project_id
@@ -148,6 +153,7 @@ module "cloud_run" {
   container_image_orchestrator = var.container_image_orchestrator
   container_image_api_gateway  = var.container_image_api_gateway
   container_image_demo_target  = var.container_image_demo_target
+  container_image_frontend     = var.container_image_frontend
   depends_on                   = [google_project_service.required]
 }
 
@@ -181,4 +187,20 @@ output "orchestrator_incidents_url" {
 
 output "demo_target_url" {
   value = module.cloud_run.demo_target_url
+}
+
+output "api_gateway_url" {
+  value = module.cloud_run.api_gateway_url
+}
+
+output "frontend_url" {
+  value = module.cloud_run.frontend_url
+}
+
+output "frontend_url" {
+  value = module.cloud_run.frontend_url
+}
+
+output "api_gateway_url" {
+  value = module.cloud_run.api_gateway_url
 }

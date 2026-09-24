@@ -27,6 +27,10 @@ variable "container_image_demo_target" {
   type = string
 }
 
+variable "container_image_frontend" {
+  type = string
+}
+
 # ── Service accounts (design.md §7.1) ──
 
 resource "google_service_account" "alert_replay" {
@@ -51,6 +55,12 @@ resource "google_service_account" "demo_target" {
   project      = var.project_id
   account_id   = "sa-demo-target"
   display_name = "demo-target-service"
+}
+
+resource "google_service_account" "frontend" {
+  project      = var.project_id
+  account_id   = "sa-frontend"
+  display_name = "frontend"
 }
 
 # ── IAM: alert-replay-service (read-only sre_telemetry, publish alerts.replay) ──
@@ -301,6 +311,32 @@ resource "google_cloud_run_v2_service" "demo_target" {
   }
 }
 
+# Public UI -- Firebase Auth is enforced client-side + at api-gateway, not here.
+resource "google_cloud_run_v2_service" "frontend" {
+  project  = var.project_id
+  location = var.region
+  name     = "frontend"
+
+  template {
+    service_account = google_service_account.frontend.email
+    scaling {
+      min_instance_count = 0
+      max_instance_count = 2
+    }
+    containers {
+      image = var.container_image_frontend
+    }
+  }
+}
+
+resource "google_cloud_run_v2_service_iam_member" "frontend_public" {
+  project  = var.project_id
+  location = var.region
+  name     = google_cloud_run_v2_service.frontend.name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
+
 # Pub/Sub push subscriptions authenticate as this SA (OIDC) -- it must also
 # hold run.invoker on the 3 orchestrator services it pushes into, or Cloud
 # Run rejects every push delivery with a 403.
@@ -335,4 +371,12 @@ output "orchestrator_service_account_email" {
 
 output "demo_target_url" {
   value = google_cloud_run_v2_service.demo_target.uri
+}
+
+output "api_gateway_url" {
+  value = google_cloud_run_v2_service.api_gateway.uri
+}
+
+output "frontend_url" {
+  value = google_cloud_run_v2_service.frontend.uri
 }

@@ -1,4 +1,4 @@
-# T67: build + push all 4 Cloud Run service container images.
+# T67: build + push all 5 Cloud Run service container images.
 # Uses Cloud Build (gcloud builds submit) rather than local `docker build`/
 # `docker push` -- sidesteps local Docker daemon / outbound-network
 # flakiness entirely, and uses Artifact Registry, NOT Container Registry
@@ -43,8 +43,41 @@ images:
         Write-Host "Building + pushing $image via Cloud Build (Dockerfile: $dockerfileRel) ..."
         gcloud builds submit $repoRoot --config=$cloudbuildYaml --project=$env:GCP_PROJECT_ID --region=$gcpRegion
     }
+
+    # Frontend: NEXT_PUBLIC_* vars are baked into the JS bundle at build time,
+    # not runtime env vars -- set these before running this script, typically
+    # to the api-gateway URL from a prior `terraform apply`. Its build context
+    # is frontend/ itself (not repoRoot), since it has no dependency on agents/.
+    $frontendImage = "$arHost/$($env:GCP_PROJECT_ID)/$arRepo/frontend:latest"
+    $frontendCloudbuildYaml = Join-Path $tmpDir "cloudbuild-frontend.yaml"
+    $apiGatewayUrl = if ($env:NEXT_PUBLIC_API_GATEWAY_URL) { $env:NEXT_PUBLIC_API_GATEWAY_URL } else { "" }
+    $firebaseApiKey = if ($env:NEXT_PUBLIC_FIREBASE_API_KEY) { $env:NEXT_PUBLIC_FIREBASE_API_KEY } else { "" }
+    $firebaseProjectId = if ($env:NEXT_PUBLIC_FIREBASE_PROJECT_ID) { $env:NEXT_PUBLIC_FIREBASE_PROJECT_ID } else { "" }
+
+    @"
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args:
+    - 'build'
+    - '-f'
+    - 'Dockerfile'
+    - '--build-arg'
+    - 'NEXT_PUBLIC_API_GATEWAY_URL=$apiGatewayUrl'
+    - '--build-arg'
+    - 'NEXT_PUBLIC_FIREBASE_API_KEY=$firebaseApiKey'
+    - '--build-arg'
+    - 'NEXT_PUBLIC_FIREBASE_PROJECT_ID=$firebaseProjectId'
+    - '-t'
+    - '$frontendImage'
+    - '.'
+images:
+- '$frontendImage'
+"@ | Set-Content -Path $frontendCloudbuildYaml -Encoding utf8
+
+    Write-Host "Building + pushing $frontendImage via Cloud Build ..."
+    gcloud builds submit "$repoRoot/frontend" --config=$frontendCloudbuildYaml --project=$env:GCP_PROJECT_ID --region=$gcpRegion
 } finally {
     Remove-Item -Recurse -Force $tmpDir -ErrorAction SilentlyContinue
 }
 
-Write-Host "All 4 service images built and pushed to $arHost/$($env:GCP_PROJECT_ID)/$arRepo."
+Write-Host "All 5 service images built and pushed to $arHost/$($env:GCP_PROJECT_ID)/$arRepo."
