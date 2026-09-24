@@ -64,7 +64,14 @@ class StageOrchestrator:
         async def _endpoint(request: Request) -> dict[str, str]:  # noqa: ANN202
             body = await request.json()
             envelope = PubSubPushEnvelope.from_request_body(body)
-            await handler(envelope.data)
+            # Every stage handler expects a flat dict of the envelope's
+            # inner `payload` fields (e.g. sourceAlert) PLUS the envelope's
+            # own `incidentId` (a sibling of `payload`, not nested inside
+            # it, per contracts/pubsub-events.md) -- merge them here once
+            # rather than making every handler unwrap the envelope itself.
+            merged_payload = dict(envelope.data.get("payload") or {})
+            merged_payload["incidentId"] = envelope.data.get("incidentId")
+            await handler(merged_payload)
             # Returning 200 acks the message; an unhandled exception in
             # `handler` propagates as a 500, triggering Pub/Sub redelivery
             # and eventually the topic's -dlq after 5 attempts (NFR-012).
