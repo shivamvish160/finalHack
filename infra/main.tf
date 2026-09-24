@@ -196,11 +196,3 @@ output "api_gateway_url" {
 output "frontend_url" {
   value = module.cloud_run.frontend_url
 }
-
-output "frontend_url" {
-  value = module.cloud_run.frontend_url
-}
-
-output "api_gateway_url" {
-  value = module.cloud_run.api_gateway_url
-}
