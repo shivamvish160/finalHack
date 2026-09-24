@@ -29,18 +29,18 @@ current feature's spec directory (`.audi/specs/<feature>/`):
 - The user explicitly says "bypass ADLC" (log this in the commit message)
 
 ## Active Technologies
-
-- Python 3.12 (all backend services & ADK agents); TypeScript 5.x / Node.js 20+ (frontend) + FastAPI, `google-adk` (Agent Development Kit, `LlmAgent`+`Runner`), `google-genai`/Vertex AI SDK (Gemini 2.5 Flash/Pro), `google-cloud-bigquery`, `google-cloud-pubsub`, `google-cloud-storage`, `google-cloud-firestore`, `google-cloud-run` (Admin API client), `google-cloud-secret-manager`, `firebase-admin`; Next.js (App Router) + React + Tailwind + Firebase JS SDK; Terraform >= 1.7 (`google`/`google-beta` providers) (001-json-agentic-ai)
+- Python 3.12 (services/agents), TypeScript 5.x / Node.js 20+ (frontend) + FastAPI, Google ADK (`google-adk`, `LlmAgent`/`Runner`), `google-cloud-bigquery`, `google-cloud-pubsub`, `google-cloud-firestore`, `google-cloud-secret-manager`, `firebase-admin`; Next.js 14 (App Router), React 18, Tailwind CSS, Firebase JS SDK (001-json-agentic-ai)
+- Existing BigQuery warehouse (read-mostly; 4 named tables appended/upserted — FR-039) + one new `sre_ml_ops` BQML dataset; Firestore (native mode) for all live/ephemeral state; Cloud Logging for the audit trail. No new relational/file storage, no Cloud Storage landing. (001-json-agentic-ai)
 
 ## Project Structure
 
 ```text
-infra/            # Terraform (all GCP infra)
-services/         # ingestion-service, agent-orchestrator, api-gateway (Cloud Run)
+infra/            # Terraform for NEW resources only (never the existing warehouse)
+services/         # alert-replay-service, agent-orchestrator, api-gateway (Cloud Run)
 agents/           # 6 ADK agent modules (alert_correlation, root_cause_analysis, ...)
 frontend/         # Next.js dashboard (8 required pages)
 scripts/          # deploy/, demo/
-data/samples/     # demo JSON fixtures for the 7 ingestion domains
+data/samples/     # LOCAL DEV/TEST FIXTURES ONLY — never used to seed the warehouse
 specs/            # spec-kit feature specs/plans (this workflow's own artifacts)
 ```
 
@@ -71,8 +71,7 @@ terraform validate; terraform plan
 Python 3.12 (all backend services & ADK agents); TypeScript 5.x / Node.js 20+ (frontend): Follow standard conventions
 
 ## Recent Changes
-
-- 001-json-agentic-ai: Added Python 3.12 (all backend services & ADK agents); TypeScript 5.x / Node.js 20+ (frontend) + FastAPI, `google-adk` (Agent Development Kit, `LlmAgent`+`Runner`), `google-genai`/Vertex AI SDK (Gemini 2.5 Flash/Pro), `google-cloud-bigquery`, `google-cloud-pubsub`, `google-cloud-storage`, `google-cloud-firestore`, `google-cloud-run` (Admin API client), `google-cloud-secret-manager`, `firebase-admin`; Next.js (App Router) + React + Tailwind + Firebase JS SDK; Terraform >= 1.7 (`google`/`google-beta` providers)
+- 001-json-agentic-ai: Re-planned in full for the existing-warehouse premise (BigQuery warehouse already provisioned/populated) — removed all ingestion/ETL/Cloud-Storage-landing scope. Added Python 3.12 (services/agents), TypeScript 5.x / Node.js 20+ (frontend) + FastAPI, Google ADK (`google-adk`, `LlmAgent`/`Runner`), `google-cloud-bigquery`, `google-cloud-pubsub`, `google-cloud-firestore`, `google-cloud-secret-manager`, `firebase-admin`; Next.js 14 (App Router), React 18, Tailwind CSS, Firebase JS SDK
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->

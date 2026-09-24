@@ -1,7 +1,12 @@
 # AUDI Graphify Wiki
 
-Generated file count: 59
+Generated file count: 76
 
+- .audi/evals/001-json-agentic-ai/2026-09-24T06-27-21.612520+00-00.md
+- .audi/evals/001-json-agentic-ai/2026-09-24T06-27-27.147353+00-00.md
+- .audi/evals/001-json-agentic-ai/2026-09-24T06-53-05.071642+00-00.md
+- .audi/evals/001-json-agentic-ai/trend.jsonl
+- .audi/init-options.json
 - .audi/memory/constitution.md
 - .audi/orchestrator-config.yml
 - .audi/scripts/powershell/Install-audi.ps1
@@ -16,6 +21,7 @@ Generated file count: 59
 - .audi/scripts/powershell/orchestrator-status.ps1
 - .audi/scripts/powershell/setup-plan.ps1
 - .audi/scripts/powershell/update-agent-context.ps1
+- .audi/specs/001-json-agentic-ai/orchestrator-state.json
 - .audi/templates/agent-file-template.md
 - .audi/templates/checklist-template.md
 - .audi/templates/constitution-template.md
@@ -41,6 +47,7 @@ Generated file count: 59
 - .github/agents/audi.taskstojira.agent.md
 - .github/agents/audi.testcases.agent.md
 - .github/agents/audi.verify.agent.md
+- .github/agents/copilot-instructions.md
 - .github/prompts/audi.analyze.prompt.md
 - .github/prompts/audi.audi.medium.prompt.md
 - .github/prompts/audi.audi.small.prompt.md
@@ -61,3 +68,13 @@ Generated file count: 59
 - .github/prompts/audi.testcases.prompt.md
 - .github/prompts/audi.verify.prompt.md
 - .vscode/settings.json
+- graphify-out/graph.json
+- graphify-out/wiki/index.md
+- specs/001-json-agentic-ai/checklists/requirements.md
+- specs/001-json-agentic-ai/contracts/pubsub-events.md
+- specs/001-json-agentic-ai/contracts/rest-api.md
+- specs/001-json-agentic-ai/data-model.md
+- specs/001-json-agentic-ai/plan.md
+- specs/001-json-agentic-ai/quickstart.md
+- specs/001-json-agentic-ai/research.md
+- specs/001-json-agentic-ai/spec.md

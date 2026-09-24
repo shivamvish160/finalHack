@@ -1,6 +1,26 @@
 {
   "nodes": [
     {
+      "id": ".audi/evals/001-json-agentic-ai/2026-09-24T06-27-21.612520+00-00.md",
+      "type": "file"
+    },
+    {
+      "id": ".audi/evals/001-json-agentic-ai/2026-09-24T06-27-27.147353+00-00.md",
+      "type": "file"
+    },
+    {
+      "id": ".audi/evals/001-json-agentic-ai/2026-09-24T06-53-05.071642+00-00.md",
+      "type": "file"
+    },
+    {
+      "id": ".audi/evals/001-json-agentic-ai/trend.jsonl",
+      "type": "file"
+    },
+    {
+      "id": ".audi/init-options.json",
+      "type": "file"
+    },
+    {
       "id": ".audi/memory/constitution.md",
       "type": "file"
     },
@@ -54,6 +74,10 @@
     },
     {
       "id": ".audi/scripts/powershell/update-agent-context.ps1",
+      "type": "file"
+    },
+    {
+      "id": ".audi/specs/001-json-agentic-ai/orchestrator-state.json",
       "type": "file"
     },
     {
@@ -157,6 +181,10 @@
       "type": "file"
     },
     {
+      "id": ".github/agents/copilot-instructions.md",
+      "type": "file"
+    },
+    {
       "id": ".github/prompts/audi.analyze.prompt.md",
       "type": "file"
     },
@@ -235,22 +263,72 @@
     {
       "id": ".vscode/settings.json",
       "type": "file"
+    },
+    {
+      "id": "graphify-out/graph.json",
+      "type": "file"
+    },
+    {
+      "id": "graphify-out/wiki/index.md",
+      "type": "file"
+    },
+    {
+      "id": "specs/001-json-agentic-ai/checklists/requirements.md",
+      "type": "file"
+    },
+    {
+      "id": "specs/001-json-agentic-ai/contracts/pubsub-events.md",
+      "type": "file"
+    },
+    {
+      "id": "specs/001-json-agentic-ai/contracts/rest-api.md",
+      "type": "file"
+    },
+    {
+      "id": "specs/001-json-agentic-ai/data-model.md",
+      "type": "file"
+    },
+    {
+      "id": "specs/001-json-agentic-ai/plan.md",
+      "type": "file"
+    },
+    {
+      "id": "specs/001-json-agentic-ai/quickstart.md",
+      "type": "file"
+    },
+    {
+      "id": "specs/001-json-agentic-ai/research.md",
+      "type": "file"
+    },
+    {
+      "id": "specs/001-json-agentic-ai/spec.md",
+      "type": "file"
     }
   ],
   "edges": [
+    {
+      "from": ".audi/evals/001-json-agentic-ai",
+      "to": ".audi/evals/001-json-agentic-ai/2026-09-24T06-27-21.612520+00-00.md",
+      "type": "contains"
+    },
+    {
+      "from": ".audi",
+      "to": ".audi/init-options.json",
+      "type": "contains"
+    },
     {
       "from": ".audi/memory",
       "to": ".audi/memory/constitution.md",
       "type": "contains"
     },
     {
-      "from": ".audi",
-      "to": ".audi/orchestrator-config.yml",
+      "from": ".audi/scripts/powershell",
+      "to": ".audi/scripts/powershell/Install-audi.ps1",
       "type": "contains"
     },
     {
-      "from": ".audi/scripts/powershell",
-      "to": ".audi/scripts/powershell/Install-audi.ps1",
+      "from": ".audi/specs/001-json-agentic-ai",
+      "to": ".audi/specs/001-json-agentic-ai/orchestrator-state.json",
       "type": "contains"
     },
     {
@@ -272,9 +350,39 @@
       "from": ".vscode",
       "to": ".vscode/settings.json",
       "type": "contains"
+    },
+    {
+      "from": "graphify-out",
+      "to": "graphify-out/graph.json",
+      "type": "contains"
+    },
+    {
+      "from": "graphify-out/wiki",
+      "to": "graphify-out/wiki/index.md",
+      "type": "contains"
+    },
+    {
+      "from": "specs/001-json-agentic-ai/checklists",
+      "to": "specs/001-json-agentic-ai/checklists/requirements.md",
+      "type": "contains"
+    },
+    {
+      "from": "specs/001-json-agentic-ai/contracts",
+      "to": "specs/001-json-agentic-ai/contracts/pubsub-events.md",
+      "type": "contains"
+    },
+    {
+      "from": "specs/001-json-agentic-ai",
+      "to": "specs/001-json-agentic-ai/data-model.md",
+      "type": "contains"
     }
   ],
   "files": [
+    ".audi/evals/001-json-agentic-ai/2026-09-24T06-27-21.612520+00-00.md",
+    ".audi/evals/001-json-agentic-ai/2026-09-24T06-27-27.147353+00-00.md",
+    ".audi/evals/001-json-agentic-ai/2026-09-24T06-53-05.071642+00-00.md",
+    ".audi/evals/001-json-agentic-ai/trend.jsonl",
+    ".audi/init-options.json",
     ".audi/memory/constitution.md",
     ".audi/orchestrator-config.yml",
     ".audi/scripts/powershell/Install-audi.ps1",
@@ -289,6 +397,7 @@
     ".audi/scripts/powershell/orchestrator-status.ps1",
     ".audi/scripts/powershell/setup-plan.ps1",
     ".audi/scripts/powershell/update-agent-context.ps1",
+    ".audi/specs/001-json-agentic-ai/orchestrator-state.json",
     ".audi/templates/agent-file-template.md",
     ".audi/templates/checklist-template.md",
     ".audi/templates/constitution-template.md",
@@ -314,6 +423,7 @@
     ".github/agents/audi.taskstojira.agent.md",
     ".github/agents/audi.testcases.agent.md",
     ".github/agents/audi.verify.agent.md",
+    ".github/agents/copilot-instructions.md",
     ".github/prompts/audi.analyze.prompt.md",
     ".github/prompts/audi.audi.medium.prompt.md",
     ".github/prompts/audi.audi.small.prompt.md",
@@ -333,19 +443,36 @@
     ".github/prompts/audi.taskstojira.prompt.md",
     ".github/prompts/audi.testcases.prompt.md",
     ".github/prompts/audi.verify.prompt.md",
-    ".vscode/settings.json"
+    ".vscode/settings.json",
+    "graphify-out/graph.json",
+    "graphify-out/wiki/index.md",
+    "specs/001-json-agentic-ai/checklists/requirements.md",
+    "specs/001-json-agentic-ai/contracts/pubsub-events.md",
+    "specs/001-json-agentic-ai/contracts/rest-api.md",
+    "specs/001-json-agentic-ai/data-model.md",
+    "specs/001-json-agentic-ai/plan.md",
+    "specs/001-json-agentic-ai/quickstart.md",
+    "specs/001-json-agentic-ai/research.md",
+    "specs/001-json-agentic-ai/spec.md"
   ],
   "modules": [
-    ".audi/memory",
+    ".audi/evals/001-json-agentic-ai",
     ".audi",
+    ".audi/memory",
     ".audi/scripts/powershell",
+    ".audi/specs/001-json-agentic-ai",
     ".audi/templates",
     ".github/agents",
     ".github/prompts",
-    ".vscode"
+    ".vscode",
+    "graphify-out",
+    "graphify-out/wiki",
+    "specs/001-json-agentic-ai/checklists",
+    "specs/001-json-agentic-ai/contracts",
+    "specs/001-json-agentic-ai"
   ],
   "summary": {
-    "file_count": 59,
+    "file_count": 76,
     "generated_by": "audi-core",
     "mode": "internal"
   }

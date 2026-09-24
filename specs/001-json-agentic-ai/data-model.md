@@ -1,387 +1,321 @@
-# Phase 1 Data Model: JSON-Driven Agentic AI Incident Prevention & Resolution Platform
+# Phase 1 Data Model: SRE Agentic AI Incident Prevention & Resolution Platform
 
 **Feature**: `001-json-agentic-ai` | **Date**: 2026-09-24
 **Prerequisite**: [research.md](./research.md)
 
-This document maps the spec's Key Entities to concrete storage: BigQuery
-datasets/tables (system of record) and Firestore collections (live UI
-read model + approval queue). All natural-id / upsert behavior implements
-Clarification #1 (upsert by per-domain natural id, or a derived SHA-256 hash
-of a documented canonical field subset when no natural id exists).
+This document describes how the **already-provisioned and populated**
+BigQuery warehouse is queried and written to by each agent — it is **not**
+a DDL/schema-creation document. No `CREATE TABLE` statement appears anywhere
+in this file for the 9 existing warehouse tables (`alert_stream`,
+`network_nodes`, `runbooks`, `embedding_model`, `customer_accounts`,
+`incidents`, `correlated_alerts`, `remediation_logs`,
+`incident_postmortems`) — all nine already exist (FR-001/Out of Scope). The
+only new schema artifacts this feature introduces are a BigQuery ML model in
+a new, platform-owned dataset (§5) and several Firestore collections (§6),
+neither of which are part of "the warehouse".
 
-## Datasets
+Per [research.md §8](./research.md#8-schema-verification-discipline-for-non-enumerated-existing-tables):
+column names for `alert_stream`, `network_nodes`, `runbooks`/
+`embedding_model`, `customer_accounts`, and `incident_postmortems` are taken
+verbatim from spec.md (fully enumerated there). Column names for `incidents`
+and `remediation_logs` beyond their documented key/linkage columns are
+**illustrative placeholders** pending `INFORMATION_SCHEMA.COLUMNS`
+verification at implementation time.
 
-| Dataset | Purpose |
-|---|---|
-| `core` | Curated, queryable tables for all 7 ingested domains + derived operational entities (incidents, remediation, approvals, forecasts, audit, executive metrics). System of record. |
-| `ml` | BigQuery ML artifacts: the remote text-embedding model and the per-service/metric `ARIMA_PLUS` forecast models. |
+## 1. Existing warehouse tables (read reference)
 
-Landing of raw uploaded JSON happens in Cloud Storage
-(`gs://<project>-landing/<domain>/<upload_id>/<filename>.json`), **not** a
-separate BigQuery raw/staging dataset — this keeps "raw JSON landing" (a
-mandatory-service requirement) truthful while avoiding a redundant BQ
-staging hop for a demo-scale dataset. The ingestion service reads directly
-from that GCS object and MERGEs into `core`.
+| Table | Rows (approx) | Documented columns | Write access from this platform |
+|---|---|---|---|
+| `sre_telemetry.alert_stream` | ~3,000 | `alert_id, node_id, service_name, severity, alert_type, message, measured_value, timestamp` | **Read-only** (FR-039) |
+| `sre_topology.network_nodes` | ~64 | `node_id, node_name, node_type, region, ip_address, status` | **Read-only** |
+| `sre_knowledge_base.runbooks` | ~20 | `runbook_id, ..., embedding ARRAY<FLOAT64>(768)` (steps/rollback/risk columns per entity description; exact names to verify) | **Read-only** |
+| `sre_knowledge_base.embedding_model` | n/a (model ref) | Remote model over `text-embedding-005` | **Read-only** (queried via `AI.GENERATE_EMBEDDING`/`ML.GENERATE_EMBEDDING`) |
+| `sre_incident_mart.customer_accounts` | ~45 | `customer_id, customer_name, service_name, tier, monthly_recurring_revenue, sla_uptime_target_pct, sla_credit_rate_per_hour, user_count` (assumed, per spec Clarification — verify at implementation time) | **Read-only** |
+| `sre_incident_mart.incidents` | ~18 existing + platform-created | `incident_id, status, root_cause, root_cause_confidence, root_cause_reasoning, opened_at, resolved_at, ...` (placeholder beyond `incident_id`/`status`) | **Insert new / update existing rows** |
+| `sre_incident_mart.correlated_alerts` | grows with platform use | `incident_id, alert_id` (many-to-one link) | **Insert new links** |
+| `sre_incident_mart.remediation_logs` | historical + platform-appended | `incident_id, runbook_id, ...` (placeholder beyond linkage columns) | **Append new outcome rows** |
+| `sre_incident_mart.incident_postmortems` | 0 (empty) | `incident_id, generated_at, root_cause_summary, timeline_summary, remediation_summary, business_impact_summary, full_report_markdown, version` (fully specified by spec Clarification) | **Upsert via MERGE** |
+
+Documented join paths (FR-005), all enforced as `LEFT JOIN` so an
+unresolved relationship never drops the row — the unresolved side is
+surfaced as `Unmapped` rather than filtered out:
+
+```text
+alert_stream.node_id       -> network_nodes.node_id
+alert_stream.service_name  -> customer_accounts.service_name
+correlated_alerts.incident_id -> incidents.incident_id
+correlated_alerts.alert_id    -> alert_stream.alert_id
+remediation_logs.incident_id  -> incidents.incident_id
+remediation_logs.runbook_id   -> runbooks.runbook_id
+incident_postmortems.incident_id -> incidents.incident_id
+```
+
+**Security note**: every `@param` below is a named BigQuery query
+parameter (research.md §18) — never string-concatenated.
 
 ---
 
-## 1. Alert → `core.alerts`
+## 2. Agent 1 — Alert Correlation Agent (FR-006, FR-007, FR-008, FR-011)
 
-Natural id: source-provided alert id if present, else
-`TO_HEX(SHA256(FORMAT('%s|%s|%s|%s', source, resource_id, description, CAST(first_seen_at AS STRING))))`.
-
-```sql
-CREATE TABLE IF NOT EXISTS core.alerts (
-  alert_id        STRING NOT NULL,   -- natural id or derived hash key
-  source          STRING,
-  severity        STRING,            -- e.g. CRITICAL/WARNING/INFO
-  status          STRING,            -- open/acknowledged/correlated
-  service_id      STRING,
-  resource_id     STRING,
-  description     STRING,            -- redacted before write
-  raw_payload     JSON,              -- original record for traceability
-  first_seen_at   TIMESTAMP NOT NULL,
-  last_seen_at    TIMESTAMP,
-  incident_id     STRING,            -- set once correlated (FR-017)
-  ingested_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP()
-)
-PARTITION BY DATE(first_seen_at)
-CLUSTER BY service_id, severity;
-```
-
-## 2. Telemetry Reading → `core.telemetry`
-
-No natural id (pure time series); dedup key is
-`(service_id, metric_name, ts)` used in the MERGE `ON` clause.
+Consumes `alerts.replay` envelopes (research.md §11). For each envelope,
+resolves topology and checks the live Firestore `pending_alerts` window
+(short-TTL, see §6) for other envelopes sharing `node_id`/`service_name`/an
+inferred dependency signal (research.md §7) within the clustering time
+window.
 
 ```sql
-CREATE TABLE IF NOT EXISTS core.telemetry (
-  service_id    STRING NOT NULL,
-  metric_name   STRING NOT NULL,
-  metric_value  FLOAT64 NOT NULL,
-  unit          STRING,
-  ts            TIMESTAMP NOT NULL,
-  ingested_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP()
-)
-PARTITION BY DATE(ts)
-CLUSTER BY service_id, metric_name;
+-- Topology resolution + Unmapped marking for a batch of node_ids in the window (FR-005)
+SELECT n.node_id, n.node_name, n.node_type, n.region, n.status
+FROM UNNEST(@node_ids) AS node_id
+LEFT JOIN `sre_topology.network_nodes` AS n USING (node_id);
+-- node_id values with no matching row are marked 'Unmapped' in the dependency view.
+
+-- Precedent check: has this node/service combination clustered into an
+-- incident before? (signal for same-vs-separate-incident decisions, FR-011)
+SELECT DISTINCT ca.incident_id, i.status
+FROM `sre_incident_mart.correlated_alerts` AS ca
+JOIN `sre_telemetry.alert_stream` AS al USING (alert_id)
+JOIN `sre_incident_mart.incidents` AS i USING (incident_id)
+WHERE al.node_id IN UNNEST(@node_ids) OR al.service_name IN UNNEST(@service_names)
+ORDER BY i.opened_at DESC
+LIMIT 20;
 ```
 
-## 3. Historical Incident Record → `core.historical_incidents`
-
-Natural id: source incident id, else hash of `(title, opened_at)`.
+On forming/updating a cluster:
 
 ```sql
-CREATE TABLE IF NOT EXISTS core.historical_incidents (
-  historical_incident_id STRING NOT NULL,
-  title           STRING,
-  summary         STRING,            -- redacted before write
-  root_cause      STRING,
-  resolution      STRING,
-  services        ARRAY<STRING>,
-  opened_at       TIMESTAMP,
-  resolved_at     TIMESTAMP,
-  mttr_minutes    FLOAT64,
-  ingested_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP()
-)
-PARTITION BY DATE(opened_at)
-CLUSTER BY historical_incident_id;
+-- New incident (or UPDATE if the orchestrator already created one for this cluster)
+INSERT INTO `sre_incident_mart.incidents` (incident_id, status, opened_at)
+VALUES (@incident_id, 'Open', CURRENT_TIMESTAMP());
+
+-- Link every correlated alert (FR-006/FR-007) — natural alert_id, not replay_event_id
+INSERT INTO `sre_incident_mart.correlated_alerts` (incident_id, alert_id)
+SELECT @incident_id, alert_id FROM UNNEST(@alert_ids) AS alert_id;
 ```
 
-## 4. Runbook / SOP → `core.runbooks`
+The chronological timeline (FR-008) is assembled at read time by merging
+(a) `correlated_alerts` → `alert_stream.timestamp`/`original_timestamp` per
+alert and (b) the Firestore `incidents/{incident_id}.stage_history` array
+(§6) recording each workflow-stage transition — there is no BigQuery
+timeline-events table (research.md §2 boundary rule).
 
-Natural id: source runbook id, else hash of `(title, steps)`. `content` is
-the concatenated text (title + applicability + steps) fed to the embedding
-model. `embedding` is populated synchronously by the ingestion service via
-`ML.GENERATE_EMBEDDING` (see research.md §2) immediately after MERGE.
+## 3. Agent 2 — Root Cause Analysis Agent (FR-009)
 
 ```sql
-CREATE TABLE IF NOT EXISTS core.runbooks (
-  runbook_id      STRING NOT NULL,
-  title           STRING,
-  applicability   STRING,            -- when this SOP applies
-  steps           JSON,               -- ordered remediation steps
-  rollback_steps  JSON,
-  risk_level      STRING,            -- low/medium/high, as authored
-  content         STRING,            -- text used to generate the embedding
-  embedding       ARRAY<FLOAT64>,     -- from ML.GENERATE_EMBEDDING(text-embedding-005)
-  embedding_model STRING,             -- e.g. 'text-embedding-005', for traceability
-  ingested_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP()
-)
-CLUSTER BY runbook_id;
+-- Every alert correlated into this incident, with topology resolved
+SELECT
+  al.alert_id, al.node_id, al.service_name, al.severity, al.alert_type,
+  al.message, al.measured_value, al.timestamp,
+  n.node_name, n.node_type, n.region, n.status AS node_status,
+  IF(n.node_id IS NULL, 'Unmapped', 'Mapped') AS topology_mapping_status
+FROM `sre_incident_mart.correlated_alerts` AS ca
+JOIN `sre_telemetry.alert_stream` AS al USING (alert_id)
+LEFT JOIN `sre_topology.network_nodes` AS n ON al.node_id = n.node_id
+WHERE ca.incident_id = @incident_id;
 
--- Created once >=1 row exists; VECTOR_SEARCH falls back to brute force until ACTIVE.
-CREATE OR REPLACE VECTOR INDEX runbooks_embedding_idx
-ON core.runbooks(embedding)
-OPTIONS(distance_type = 'COSINE', index_type = 'IVF');
+-- Historical precedent: past incidents/remediations touching the same services
+SELECT i.incident_id, i.root_cause, i.root_cause_confidence, i.status,
+       r.runbook_id, r.executed_at
+FROM `sre_incident_mart.incidents` AS i
+LEFT JOIN `sre_incident_mart.remediation_logs` AS r USING (incident_id)
+WHERE i.incident_id != @incident_id
+  AND EXISTS (
+    SELECT 1 FROM `sre_incident_mart.correlated_alerts` AS ca2
+    JOIN `sre_telemetry.alert_stream` AS al2 USING (alert_id)
+    WHERE ca2.incident_id = i.incident_id
+      AND al2.service_name IN UNNEST(@current_service_names))
+ORDER BY i.opened_at DESC
+LIMIT 10;
 ```
 
-Fallback path (documented, not built for the demo): an autonomous
-`GENERATED ALWAYS AS (AI.EMBED(content, connection_id => ..., endpoint =>
-'text-embedding-005')) STORED OPTIONS(asynchronous = TRUE)` column could
-replace the synchronous call for a non-latency-sensitive bulk historical
-import.
-
-## 5. Service Topology / Dependency Graph → `core.services`, `core.service_dependencies`
+`message` content is passed through the redaction utility (research.md §15)
+before it ever reaches the Gemini prompt. Output (root cause, confidence,
+reasoning) is persisted:
 
 ```sql
-CREATE TABLE IF NOT EXISTS core.services (
-  service_id   STRING NOT NULL,
-  name         STRING,
-  tier         STRING,
-  owner_team   STRING,
-  ingested_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP()
-)
-CLUSTER BY service_id;
-
-CREATE TABLE IF NOT EXISTS core.service_dependencies (
-  service_id          STRING NOT NULL,
-  depends_on_service  STRING NOT NULL,
-  relationship_type   STRING,        -- e.g. calls/depends_on/hosted_on
-  ingested_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP()
-)
-CLUSTER BY service_id;
+UPDATE `sre_incident_mart.incidents`
+SET root_cause = @root_cause,
+    root_cause_confidence = @confidence,
+    root_cause_reasoning = @reasoning,
+    status = 'Investigating'
+WHERE incident_id = @incident_id;
 ```
 
-Natural id / dedup key: `(service_id, depends_on_service, relationship_type)`
-for edges; `service_id` for the dimension table.
+## 4. Agent 3 — Runbook Retrieval Agent (FR-012, FR-013, FR-014)
 
-## 6. SLA Definition → `core.sla_definitions`
+Query-time embedding + `VECTOR_SEARCH`, exact syntax per research.md §3:
 
 ```sql
-CREATE TABLE IF NOT EXISTS core.sla_definitions (
-  sla_id              STRING NOT NULL,   -- natural id or hash(service_id, customer_segment)
-  service_id          STRING NOT NULL,
-  customer_segment    STRING,
-  uptime_target_pct   FLOAT64,
-  credit_terms        JSON,
-  penalty_per_breach_usd FLOAT64,
-  ingested_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP()
-)
-CLUSTER BY service_id;
+SELECT base.runbook_id, base.title, base.risk_level, base.steps,
+       base.rollback_steps, distance AS vector_distance
+FROM VECTOR_SEARCH(
+  TABLE `sre_knowledge_base.runbooks`, 'embedding',
+  (SELECT ml_generate_embedding_result AS query_embedding
+   FROM AI.GENERATE_EMBEDDING(
+     MODEL `sre_knowledge_base.embedding_model`,
+     (SELECT @query_text AS content),
+     STRUCT('RETRIEVAL_QUERY' AS task_type))),
+  query_column_to_search => 'query_embedding',
+  top_k => 5, distance_type => 'COSINE')
+ORDER BY vector_distance ASC;
 ```
 
-## 7. Revenue Impact Record → `core.revenue_impact`
+`@query_text` is built from the incident's `root_cause_reasoning` plus a
+small, redacted sample of its correlated alert `message` values. A
+configurable similarity threshold on `vector_distance` decides
+`belowThreshold` (FR-014/AC-2.5) — if no row clears it, the agent returns an
+explicit no-confident-match result rather than the nearest (but poor) row.
 
-Carries the customer/user-count attribute used to compute affected-customer
-counts (Clarification #4) — no separate "customer" data domain is
-introduced.
+## 5. Agent 4 — Predictive Risk Agent (FR-022, FR-023)
+
+Triggered by Cloud Scheduler (`predictions.tick`), not by alert arrival —
+predictions must exist *before* a failure's alerts fire (AC-3.1). Uses the
+BQML model from research.md §6 (`ML.FORECAST` / `ML.DETECT_ANOMALIES` /
+`ML.EXPLAIN_FORECAST` against `sre_ml_ops.alert_trend_forecast_model`,
+itself trained from `sre_telemetry.alert_stream`). Output is written only to
+Firestore `predictions/{service_name}__{alert_type}` (research.md §2
+boundary rule) — **not** to any new BigQuery table.
+
+## 6. Agent 5 — Remediation Agent (FR-015 – FR-021)
+
+Reads the matched runbook's documented procedure by id:
 
 ```sql
-CREATE TABLE IF NOT EXISTS core.revenue_impact (
-  record_id           STRING NOT NULL,  -- natural id or hash(service_id, customer_segment)
-  service_id          STRING NOT NULL,
-  customer_segment    STRING,
-  revenue_per_hour_usd FLOAT64,
-  customer_count      INT64,            -- basis for "affected customers" (FR-034)
-  ingested_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP()
-)
-CLUSTER BY service_id;
+SELECT runbook_id, title, steps, rollback_steps, risk_level
+FROM `sre_knowledge_base.runbooks`
+WHERE runbook_id = @runbook_id;
 ```
+
+Fix/rollback scripts are LLM-generated *from* these documented steps (never
+hardcoded), validated, then held in Firestore `approvals/{action_id}`
+(status `Proposed`) until a human decision arrives (FR-017). Only after
+`remediation.approved` and a real Cloud Run Admin API execution does the
+outcome get appended to the one relevant BigQuery table:
+
+```sql
+INSERT INTO `sre_incident_mart.remediation_logs`
+  (incident_id, runbook_id, outcome, executed_at, executed_by, details)
+VALUES (@incident_id, @runbook_id, @outcome, CURRENT_TIMESTAMP(), @executed_by, @details);
+```
+
+(Column names beyond `incident_id`/`runbook_id` are placeholders — research.md §8.)
+A rejected proposal (FR-021) updates the Firestore `approvals/{action_id}`
+status to `Rejected` and the incident's Firestore stage back to
+`Investigating`; nothing is written to `remediation_logs` for a rejection
+(only real executed outcomes are logged there).
+
+## 7. Agent 6 — Executive Impact Agent (FR-027 – FR-032)
+
+```sql
+-- Business-impact join for one incident (FR-027)
+SELECT ca.customer_id, ca.customer_name, ca.tier, ca.monthly_recurring_revenue,
+       ca.sla_uptime_target_pct, ca.sla_credit_rate_per_hour, ca.user_count,
+       IF(ca.service_name IS NULL, 'Unmapped', 'Mapped') AS impact_mapping_status
+FROM `sre_incident_mart.correlated_alerts` AS link
+JOIN `sre_telemetry.alert_stream` AS al ON al.alert_id = link.alert_id
+LEFT JOIN `sre_incident_mart.customer_accounts` AS ca ON ca.service_name = al.service_name
+WHERE link.incident_id = @incident_id;
+```
+
+Business formulas (documented, not hardcoded per-incident): `revenue_at_risk_usd
+= SUM(monthly_recurring_revenue) / (24*30) * incident_duration_hours`;
+`sla_exposure_usd = SUM(sla_credit_rate_per_hour) * incident_duration_hours`
+for accounts breaching `sla_uptime_target_pct`; `affected_customers =
+COUNT(DISTINCT customer_id)`; `affected_users = SUM(user_count)`.
+
+```sql
+-- MTTR (FR-028): platform-handled vs. historical baseline
+SELECT AVG(TIMESTAMP_DIFF(resolved_at, opened_at, MINUTE)) AS avg_mttr_minutes
+FROM `sre_incident_mart.incidents`
+WHERE status IN ('Resolved', 'Closed') AND resolved_at IS NOT NULL
+  AND opened_at >= @platform_deployment_ts;  -- excludes the ~18 pre-existing seed incidents
+```
+
+Postmortem write: the `MERGE` from research.md §16, run once per
+`incidents.resolved` event. Executive metrics (revenue at risk, SLA
+exposure, MTTR, resolution success rate, time saved) are computed live and
+cached to Firestore `executive_metrics/latest` (research.md §2 boundary
+rule) — **not** a new BigQuery table.
 
 ---
 
-## Derived / operational entities (written by agents & orchestrator, not uploaded)
-
-## 8. Incident → `core.incidents` (+ `core.incident_timeline_events`)
-
-Status enum is fixed per Clarification #5: `Open, Investigating,
-Awaiting Approval, Remediating, Resolved, Closed`. A prediction is **never**
-a status value here — see Risk Forecast below.
+## 8. New BigQuery ML dataset (not part of the existing warehouse)
 
 ```sql
-CREATE TABLE IF NOT EXISTS core.incidents (
-  incident_id           STRING NOT NULL,
-  status                STRING NOT NULL,  -- enum enforced in application layer
-  opened_at             TIMESTAMP NOT NULL,
-  resolved_at           TIMESTAMP,
-  root_cause            STRING,
-  root_cause_confidence FLOAT64,
-  root_cause_reasoning  STRING,
-  affected_services     ARRAY<STRING>,
-  correlated_alert_ids  ARRAY<STRING>,
-  updated_at            TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP()
-)
-PARTITION BY DATE(opened_at)
-CLUSTER BY incident_id;
-
-CREATE TABLE IF NOT EXISTS core.incident_timeline_events (
-  incident_id  STRING NOT NULL,
-  event_type   STRING NOT NULL,  -- alert_correlated/root_cause_set/runbook_matched/...
-  description  STRING,
-  actor        STRING,           -- agent name or user uid
-  ts           TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP()
-)
-PARTITION BY DATE(ts)
-CLUSTER BY incident_id;
-```
-
-State transitions: `Open → Investigating → Awaiting Approval → Remediating →
-Resolved → Closed`, with a reject path `Awaiting Approval → Investigating`
-(FR-026) and a direct `Open/Investigating → Closed` archival path for
-stale/duplicate incidents.
-
-## 9. Remediation Action → `core.remediation_actions`
-
-```sql
-CREATE TABLE IF NOT EXISTS core.remediation_actions (
-  action_id       STRING NOT NULL,
-  incident_id     STRING NOT NULL,
-  runbook_id      STRING,
-  fix_script      STRING,   -- redacted before write/display (FR-042)
-  rollback_script STRING,
-  risk_level      STRING,
-  status          STRING NOT NULL, -- Proposed/Approved/Rejected/Executing/Succeeded/Failed
-  execution_result JSON,    -- real Cloud Run Admin API response/exit status
-  created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP(),
-  updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP()
-)
-CLUSTER BY incident_id;
-```
-
-## 10. Approval Decision → `core.approval_decisions`
-
-```sql
-CREATE TABLE IF NOT EXISTS core.approval_decisions (
-  decision_id  STRING NOT NULL,
-  action_id    STRING NOT NULL,
-  approver_uid STRING NOT NULL,   -- Firebase uid (FR-025/NFR-008)
-  decision     STRING NOT NULL,   -- Approved/Rejected
-  comments     STRING,
-  decided_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP()
-)
-CLUSTER BY action_id;
-```
-
-## 11. Risk Forecast / Prediction → `core.risk_forecasts`
-
-Always a separate entity from Incident status, per Clarification #5.
-`occurred` is filled in later (nullable) to track forecast accuracy per the
-"predicted outage did not occur" edge case.
-
-```sql
-CREATE TABLE IF NOT EXISTS core.risk_forecasts (
-  forecast_id           STRING NOT NULL,
-  service_id            STRING NOT NULL,
-  metric_name           STRING,
-  predicted_failure     STRING,
-  time_to_failure_start TIMESTAMP,
-  time_to_failure_end   TIMESTAMP,
-  confidence            FLOAT64,
-  rationale             STRING,   -- from ML.EXPLAIN_FORECAST (NFR-010)
-  is_anomaly_only       BOOL,     -- TRUE = flagged trend, not a full prediction (FR-031)
-  occurred              BOOL,     -- nullable; backfilled for accuracy tracking
-  created_at            TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP()
-)
-PARTITION BY DATE(created_at)
-CLUSTER BY service_id;
-```
-
-## 12. Audit Log Entry → `core.audit_log`
-
-```sql
-CREATE TABLE IF NOT EXISTS core.audit_log (
-  entry_id   STRING NOT NULL,
-  actor_uid  STRING,
-  action     STRING NOT NULL,   -- upload/incident_view/approval_decision/remediation_execute/...
-  resource   STRING,            -- e.g. incident_id, action_id, upload job id
-  ts         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP(),
-  details    JSON
-)
-PARTITION BY DATE(ts)
-CLUSTER BY actor_uid;
-```
-
-## 13. Executive metrics snapshot → `core.executive_metrics`
-
-Refreshed by the Executive Impact Agent on event + Cloud Scheduler cadence.
-
-```sql
-CREATE TABLE IF NOT EXISTS core.executive_metrics (
-  snapshot_ts               TIMESTAMP NOT NULL,
-  revenue_at_risk_usd       FLOAT64,
-  sla_exposure_usd          FLOAT64,
-  affected_customers        INT64,
-  mttr_minutes              FLOAT64,
-  mttr_reduction_pct        FLOAT64,
-  resolution_success_rate_pct FLOAT64,
-  time_saved_hours          FLOAT64
-)
-PARTITION BY DATE(snapshot_ts);
-```
-
-## 14. User / Role — Firebase Authentication (not a BigQuery table)
-
-Identity + role live in Firebase Auth custom claims
-(`role ∈ {OnCallEngineer, IncidentCommander, Approver, ExecutiveViewer,
-Administrator}`), per Clarification #3. `approver_uid`/`actor_uid` columns
-above are Firebase uids, joined to Firebase Auth (not a local users table)
-to avoid duplicating identity state.
-
----
-
-## BigQuery ML models (`ml` dataset)
-
-```sql
--- Embedding remote model (research.md §2)
-CREATE OR REPLACE MODEL ml.runbook_embedding_model
-REMOTE WITH CONNECTION DEFAULT
-OPTIONS (ENDPOINT = 'text-embedding-005');
-
--- Forecast model, one logical model covering all service/metric time series
--- (research.md §4); retrained on a Cloud Scheduler cadence.
-CREATE OR REPLACE MODEL ml.telemetry_forecast_model
+CREATE OR REPLACE MODEL `sre_ml_ops.alert_trend_forecast_model`
 OPTIONS (
   MODEL_TYPE = 'ARIMA_PLUS',
-  TIME_SERIES_TIMESTAMP_COL = 'ts',
-  TIME_SERIES_DATA_COL = 'metric_value',
-  TIME_SERIES_ID_COL = ['service_id', 'metric_name'],
+  TIME_SERIES_TIMESTAMP_COL = 'timestamp',
+  TIME_SERIES_DATA_COL = 'measured_value',
+  TIME_SERIES_ID_COL = ['service_name', 'alert_type'],
   HORIZON = 60,
   AUTO_ARIMA = TRUE
 ) AS
-SELECT service_id, metric_name, ts, metric_value FROM core.telemetry;
+SELECT service_name, alert_type, timestamp, measured_value
+FROM `sre_telemetry.alert_stream`
+WHERE service_name IS NOT NULL;
 ```
 
-`ML.FORECAST(MODEL ml.telemetry_forecast_model, STRUCT(60 AS horizon, 0.95 AS
-confidence_level))` produces the prediction; `ML.DETECT_ANOMALIES` and
-`ML.EXPLAIN_FORECAST` on the same model produce the anomaly flag and
-rationale respectively (both feed `core.risk_forecasts`).
+`sre_ml_ops` is a new, Terraform-created dataset in the same project/region
+as the existing warehouse (single-region `us-central1`, per Clarification),
+holding only this model object. Retrained on a Cloud Scheduler cadence.
 
----
-
-## Firestore collections (live UI read model + approval queue)
-
-Firestore is **not** the system of record — every field here is a
-denormalized projection of the BigQuery rows above, written immediately
-after the corresponding BigQuery write so the UI can subscribe in realtime
-without polling BigQuery.
+## 9. Firestore collections (live/ephemeral state — research.md §2)
 
 ```text
 incidents/{incident_id}
-  status, root_cause, root_cause_confidence, affected_services,
-  correlated_alert_count, current_stage, updated_at
+  status, root_cause, root_cause_confidence, affected_services[],
+  correlated_alert_count, current_stage, stage_history: [{stage, actor, at}],
+  updated_at
 
 approvals/{action_id}
-  incident_id, status (pending/approved/rejected), risk_level,
-  proposer, created_at, decided_at, approver_uid, comments
+  incident_id, runbook_id, fix_script, rollback_script, risk_level,
+  status (Proposed|Approved|Rejected|Executing|Succeeded|Failed),
+  proposer, created_at, approver_uid, decision, comments, decided_at,
+  execution_result (real Cloud Run Admin API response, once executed)
 
-ingestion_jobs/{job_id}
-  domain, filename, status (pending/in_progress/succeeded/failed),
-  error_reason, uploaded_by, updated_at
+predictions/{service_name}__{alert_type}
+  predicted_failure, time_to_failure_start, time_to_failure_end,
+  confidence, rationale, is_anomaly_only, generated_at
+
+executive_metrics/latest
+  revenue_at_risk_usd, sla_exposure_usd, affected_customers, affected_users,
+  mttr_minutes, mttr_reduction_pct, resolution_success_rate_pct,
+  time_saved_hours, snapshot_ts
+
+pending_alerts/{replay_event_id}   -- TTL ~10 minutes, live clustering window only
+  alert_id, node_id, service_name, severity, alert_type, measured_value,
+  occurred_at, incident_id (once assigned)
 ```
 
-`ingestion_jobs` directly satisfies FR-007 (per-file ingestion status
-visible to the uploading user).
+`approvals/{action_id}` **is** the Approval Decision and Remediation Action
+record (FR-016, FR-017, FR-018) — there is no separate BigQuery table for
+either; only the final executed outcome is appended to `remediation_logs`.
 
-## Validation rules (applied by the ingestion service before any MERGE)
+## 10. Cloud Logging audit entry (FR-037/NFR-008 — not a BigQuery table)
 
-- Each domain has a JSON Schema (`services/ingestion-service/app/validators/`)
-  describing required fields and types; a file failing validation never
-  reaches BigQuery — it produces a `failed` `ingestion_jobs` doc with a
-  specific reason (FR-005, AC-1.3).
-- Every table's natural-id/hash-key column is `NOT NULL` and is the MERGE
-  key — re-uploading the same logical record updates the existing row
-  in place (FR-002/FR-006/AC-1.4), never appends a duplicate.
-- Free-text fields (`description`, `summary`, `content`, `fix_script`,
-  `rollback_script`) pass through the shared redaction utility before
-  being written (FR-033/FR-044).
+```json
+{
+  "severity": "NOTICE",
+  "jsonPayload": {
+    "actor_uid": "string",
+    "action": "incident_view | approval_decision | remediation_execute | ...",
+    "resource": "incident_id or action_id",
+    "timestamp": "RFC3339",
+    "details": {}
+  }
+}
+```
+
+## 11. Validation & security rules
+
+- Every query above uses named `@param` parameters (research.md §18) — no
+  string concatenation of event- or user-derived values into SQL text.
+- Free-text fields pulled from `alert_stream.message`, `runbooks`
+  steps/content, or `incidents` notes pass through the shared redaction
+  utility before reaching any prompt, dashboard field, generated
+  script, or log line (research.md §15) — applied at read/output time since
+  this feature performs no ingestion.
+- `alert_stream`, `network_nodes`, `runbooks`, `embedding_model`, and
+  `customer_accounts` are never targeted by `INSERT`/`UPDATE`/`MERGE`/
+  `DELETE` anywhere in this platform (FR-039).
