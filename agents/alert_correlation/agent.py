@@ -91,7 +91,7 @@ def fetch_precedent_incidents(bq_client: BigQueryClient, node_ids: list[str], se
     """Has this node/service combination clustered into an incident before?
     (FR-011 precedent signal, data-model.md §2)."""
     sql = """
-        SELECT DISTINCT ca.incident_id, i.status
+        SELECT DISTINCT ca.incident_id, i.status, i.started_at
         FROM `sre_incident_mart.correlated_alerts` AS ca
         JOIN `sre_telemetry.alert_stream` AS al ON al.alert_id = ca.alert_id
         JOIN `sre_incident_mart.incidents` AS i ON i.incident_id = ca.incident_id
