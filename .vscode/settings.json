@@ -1,0 +1,14 @@
+{
+    "chat.promptFilesRecommendations": {
+        "audi.constitution": true,
+        "audi.specify": true,
+        "audi.plan": true,
+        "audi.tasks": true,
+        "audi.implement": true
+    },
+    "chat.tools.terminal.autoApprove": {
+        ".audi/scripts/bash/": true,
+        ".audi/scripts/powershell/": true
+    }
+}
+

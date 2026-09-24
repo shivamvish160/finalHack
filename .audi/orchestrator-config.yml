@@ -1,0 +1,44 @@
+parallel:
+  max_concurrency: 3
+models:
+  primary: auto
+  review: ask
+verify:
+  auto_prompt_install: true
+  install_url: ''
+subagents:
+  enabled: false
+  max_concurrency: 2
+  review_pipeline: true
+  max_review_iterations: 3
+  continuous_mode: true
+  context_budget: 32000
+budgets:
+  cost_per_feature_usd: null
+  wall_clock_minutes: null
+git_checkpoints: true
+auto_approve_gates: false
+context_budget_warning_phase: 9
+protected_branches:
+  - main
+  - master
+  - develop
+  - trunk
+tier_routing:
+  enabled: false
+sensors:
+  timeout_seconds: 60
+  fast:
+    []
+jira:
+  enabled: true
+  story_key: ''
+  comment_on_phase_complete: true
+  transition_on_implement: 'In Development'
+  transition_on_review: 'In Review'
+  transition_on_done: ''
+  auto_create_stories: true
+  auto_transition_stories: true
+  auto_create_subtasks: true
+  auto_transition_subtasks: true
+  transition_subtask_on_complete: 'Done'
