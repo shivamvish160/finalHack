@@ -62,9 +62,13 @@ def fetch_alert_stream_rows(client: BigQueryClient) -> Iterator[dict[str, Any]]:
     yield from client.query_json_rows(sql)
 
 
-def run_replay_loop(target_msgs_per_minute: int = 1000) -> None:
+def run_replay_loop(target_msgs_per_minute: int = 1000, duration_seconds: float | None = None) -> None:
     """Continuously replay `alert_stream` rows to the `alerts.replay` topic,
-    looping over the finite row set to sustain the target throughput."""
+    looping over the finite row set to sustain the target throughput.
+
+    `duration_seconds=None` runs forever (matches the always-on deployed
+    Cloud Run service); pass a value to auto-stop after that many seconds
+    (useful for local/manual test runs)."""
     project_id = os.environ["GCP_PROJECT_ID"]
     bq_client = BigQueryClient(project_id)
     publisher = pubsub_v1.PublisherClient()
@@ -75,13 +79,19 @@ def run_replay_loop(target_msgs_per_minute: int = 1000) -> None:
         raise RuntimeError("sre_telemetry.alert_stream returned zero rows -- nothing to replay")
 
     interval_seconds = 60.0 / target_msgs_per_minute
+    start_time = time.monotonic()
     index = 0
-    while True:
+    published = 0
+    while duration_seconds is None or (time.monotonic() - start_time) < duration_seconds:
         row = rows[index % len(rows)]
         envelope = build_replay_envelope(row)
         publisher.publish(topic_path, _to_json_bytes(envelope))
+        published += 1
+        if published % 50 == 0:
+            print(f"Published {published} alerts so far...", flush=True)
         index += 1
         time.sleep(interval_seconds)
+    print(f"Done: published {published} alerts to {topic_path}.", flush=True)
 
 
 def _to_json_bytes(envelope: dict[str, Any]) -> bytes:
@@ -91,4 +101,19 @@ def _to_json_bytes(envelope: dict[str, Any]) -> bytes:
 
 
 if __name__ == "__main__":
-    run_replay_loop(int(os.environ.get("ALERT_REPLAY_TARGET_MSGS_PER_MINUTE", "1000")))
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Replay sre_telemetry.alert_stream to the alerts.replay Pub/Sub topic.")
+    parser.add_argument("--rate", type=int, default=int(os.environ.get("ALERT_REPLAY_TARGET_MSGS_PER_MINUTE", "1000")),
+                         help="Target messages per minute (default: 1000, or ALERT_REPLAY_TARGET_MSGS_PER_MINUTE env var).")
+    parser.add_argument("--duration-seconds", type=float, default=None,
+                         help="Stop after this many seconds. Omit to run forever (matches the deployed service).")
+    parser.add_argument("--duration-minutes", type=float, default=None,
+                         help="Stop after this many minutes (alternative to --duration-seconds).")
+    args = parser.parse_args()
+
+    duration = args.duration_seconds
+    if duration is None and args.duration_minutes is not None:
+        duration = args.duration_minutes * 60
+
+    run_replay_loop(args.rate, duration)
