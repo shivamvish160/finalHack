@@ -15,7 +15,7 @@ export default function IncidentTimelinePage({ params }: { params: { incidentId:
 
   useEffect(() => {
     async function load() {
-      const token = window.localStorage.getItem('idToken') ?? '';
+      const token = window.localStorage.getItem('demoRole') ?? '';
       const res = await fetch(`${API_BASE}/incidents/${params.incidentId}/timeline`, {
         headers: { Authorization: `Bearer ${token}` },
       });

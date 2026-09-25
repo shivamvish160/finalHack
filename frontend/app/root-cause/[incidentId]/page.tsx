@@ -17,7 +17,7 @@ export default function RootCauseAnalysisViewPage({ params }: { params: { incide
 
   useEffect(() => {
     async function load() {
-      const token = window.localStorage.getItem('idToken') ?? '';
+      const token = window.localStorage.getItem('demoRole') ?? '';
       const res = await fetch(`${API_BASE}/incidents/${params.incidentId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });

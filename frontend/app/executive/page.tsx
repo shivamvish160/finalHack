@@ -19,7 +19,7 @@ export default function ExecutiveDashboardPage() {
 
   useEffect(() => {
     async function load() {
-      const token = window.localStorage.getItem('idToken') ?? '';
+      const token = window.localStorage.getItem('demoRole') ?? '';
       const res = await fetch(`${API_BASE}/executive/summary`, {
         headers: { Authorization: `Bearer ${token}` },
       });

@@ -16,7 +16,7 @@ export default function RunbookRecommendationViewPage({ params }: { params: { in
 
   useEffect(() => {
     async function load() {
-      const token = window.localStorage.getItem('idToken') ?? '';
+      const token = window.localStorage.getItem('demoRole') ?? '';
       const res = await fetch(`${API_BASE}/incidents/${params.incidentId}/runbook-matches`, {
         headers: { Authorization: `Bearer ${token}` },
       });

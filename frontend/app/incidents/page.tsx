@@ -22,7 +22,7 @@ export default function LiveIncidentConsolePage() {
   useEffect(() => {
     async function load() {
       try {
-        const token = window.localStorage.getItem('idToken') ?? '';
+        const token = window.localStorage.getItem('demoRole') ?? '';
         if (!token) {
           setError('Not signed in -- go to /login first.');
           return;

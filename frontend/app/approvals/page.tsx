@@ -18,7 +18,7 @@ export default function ApprovalConsolePage() {
   const [approvals, setApprovals] = useState<PendingApproval[]>([]);
 
   async function load() {
-    const token = window.localStorage.getItem('idToken') ?? '';
+    const token = window.localStorage.getItem('demoRole') ?? '';
     const res = await fetch(`${API_BASE}/approvals?status=pending`, {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -30,7 +30,7 @@ export default function ApprovalConsolePage() {
   }, []);
 
   async function decide(actionId: string, decision: 'approve' | 'reject') {
-    const token = window.localStorage.getItem('idToken') ?? '';
+    const token = window.localStorage.getItem('demoRole') ?? '';
     await fetch(`${API_BASE}/approvals/${actionId}/decision`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },

@@ -26,7 +26,7 @@ export default function AlertCorrelationViewPage({ params }: { params: { inciden
 
   useEffect(() => {
     async function load() {
-      const token = window.localStorage.getItem('idToken') ?? '';
+      const token = window.localStorage.getItem('demoRole') ?? '';
       const headers = { Authorization: `Bearer ${token}` };
       const [alertsRes, graphRes] = await Promise.all([
         fetch(`${API_BASE}/incidents/${params.incidentId}/alerts`, { headers }),

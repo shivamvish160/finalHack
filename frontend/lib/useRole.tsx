@@ -17,7 +17,7 @@ export function useCurrentUser(): CurrentUser | null {
 
   useEffect(() => {
     async function load() {
-      const token = window.localStorage.getItem('idToken') ?? '';
+      const token = window.localStorage.getItem('demoRole') ?? '';
       const res = await fetch(`${API_BASE}/me`, { headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) setUser(await res.json());
     }

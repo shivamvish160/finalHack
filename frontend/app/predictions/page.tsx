@@ -19,7 +19,7 @@ export default function PredictiveHealthDashboardPage() {
 
   useEffect(() => {
     async function load() {
-      const token = window.localStorage.getItem('idToken') ?? '';
+      const token = window.localStorage.getItem('demoRole') ?? '';
       const headers = { Authorization: `Bearer ${token}` };
       const [predRes, anomRes] = await Promise.all([
         fetch(`${API_BASE}/predictions?activeOnly=true`, { headers }),

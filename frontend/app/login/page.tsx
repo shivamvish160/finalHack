@@ -18,7 +18,7 @@ export default function LoginPage() {
   const [role, setRole] = useState(DEMO_ROLES[0]);
 
   function handleSignIn() {
-    window.localStorage.setItem('idToken', role);
+    window.localStorage.setItem('demoRole', role);
     router.push('/incidents');
   }
 
