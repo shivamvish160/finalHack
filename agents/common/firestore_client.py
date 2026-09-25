@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from google.cloud import firestore
+from google.api_core.exceptions import AlreadyExists
 
 
 class FirestoreClient:
@@ -30,6 +31,7 @@ class FirestoreClient:
     # and the existing warehouse schema must never be altered. This is a
     # Firestore-only projection, never a substitute system of record.
     INCIDENT_PROJECTIONS = "incident_projections"
+    REPLAY_SESSIONS = "replay_sessions"
 
     def __init__(self, project_id: str | None = None) -> None:
         self._project_id = project_id or os.environ["GCP_PROJECT_ID"]
@@ -121,6 +123,15 @@ class FirestoreClient:
 
     def clear_pending_cluster(self, cluster_key: str) -> None:
         self._client.collection(self.PENDING_ALERTS).document(cluster_key).delete()
+
+    def claim_replay_session(self, replay_session_id: str, incident_id: str) -> bool:
+        """Atomically allow exactly one alert delivery to start downstream stages."""
+        ref = self._client.collection(self.REPLAY_SESSIONS).document(replay_session_id)
+        try:
+            ref.create({"incidentId": incident_id, "createdAt": _now()})
+        except AlreadyExists:
+            return False
+        return True
 
 
 def _now() -> datetime:

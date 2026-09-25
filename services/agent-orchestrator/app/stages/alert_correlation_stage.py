@@ -97,6 +97,10 @@ def handle_alerts_replay(payload: dict[str, Any]) -> list[dict[str, Any]]:
         ]
 
     firestore_client.add_pending_alert(cluster_key, replay_event_id, alert)
+    if replay_session_id and not firestore_client.claim_replay_session(
+        replay_session_id, session_incident_id
+    ):
+        return []
     return results
 
 

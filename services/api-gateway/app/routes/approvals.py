@@ -47,7 +47,8 @@ def _publish(topic: str, payload: dict[str, Any]) -> None:
     topic_path = publisher.topic_path(os.environ["GCP_PROJECT_ID"], topic)
     import json
 
-    publisher.publish(topic_path, json.dumps(payload).encode("utf-8"))
+    publisher.publish(topic_path, json.dumps(payload).encode("utf-8")).result(timeout=30)
+    publisher.stop()
 
 
 @router.get("")
@@ -74,6 +75,12 @@ async def decide_approval(
     log_approval_decision(user.uid, action_id, approval["incidentId"], body.decision, body.comments)
 
     topic = "remediation.approved" if body.decision == "approve" else "remediation.rejected"
-    _publish(topic, {"incidentId": approval["incidentId"], "payload": {"actionId": action_id}})
+    _publish(
+        topic,
+        {
+            "incidentId": approval["incidentId"],
+            "payload": {"actionId": action_id, "approverUid": user.uid, "comments": body.comments},
+        },
+    )
 
     return {"actionId": action_id, "decision": body.decision, "decidedAt": decided_at.isoformat()}

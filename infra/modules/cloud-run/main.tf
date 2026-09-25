@@ -272,6 +272,10 @@ resource "google_cloud_run_v2_service" "orchestrator_incidents" {
         name  = "GCP_PROJECT_ID"
         value = var.project_id
       }
+      env {
+        name  = "DEMO_TARGET_SERVICE_URL"
+        value = google_cloud_run_v2_service.demo_target.uri
+      }
     }
   }
 }

@@ -135,6 +135,15 @@ locals {
     for file in sort(local.orchestrator_source_files) : filesha256("${path.root}/../${file}")
   ])), 0, 16)
   orchestrator_image = "${var.region}-docker.pkg.dev/${var.project_id}/sre-incident-platform/agent-orchestrator:${local.orchestrator_source_hash}"
+  api_gateway_source_files = concat(
+    [for file in fileset("${path.root}/../agents", "**/*.py") : "agents/${file}"],
+    [for file in fileset("${path.root}/../services/api-gateway/app", "**/*.py") : "services/api-gateway/app/${file}"],
+    ["services/api-gateway/Dockerfile", "requirements.txt"],
+  )
+  api_gateway_source_hash = substr(sha256(join("", [
+    for file in sort(local.api_gateway_source_files) : filesha256("${path.root}/../${file}")
+  ])), 0, 16)
+  api_gateway_image = "${var.region}-docker.pkg.dev/${var.project_id}/sre-incident-platform/api-gateway:${local.api_gateway_source_hash}"
 }
 
 # Build only when orchestrator/agent source changes. The content-addressed
@@ -145,6 +154,19 @@ resource "terraform_data" "build_orchestrator" {
 
   provisioner "local-exec" {
     command = "gcloud builds submit \"${path.root}/..\" --config=\"${path.root}/cloudbuild-agent-orchestrator.yaml\" --substitutions=_IMAGE=${local.orchestrator_image} --project=${var.project_id} --region=${var.region}"
+  }
+
+  depends_on = [
+    google_artifact_registry_repository.images,
+    google_project_iam_member.cloudbuild_artifact_registry_writer,
+  ]
+}
+
+resource "terraform_data" "build_api_gateway" {
+  triggers_replace = [local.api_gateway_source_hash]
+
+  provisioner "local-exec" {
+    command = "gcloud builds submit \"${path.root}/..\" --config=\"${path.root}/cloudbuild-api-gateway.yaml\" --substitutions=_IMAGE=${local.api_gateway_image} --project=${var.project_id} --region=${var.region}"
   }
 
   depends_on = [
@@ -179,10 +201,14 @@ module "cloud_run" {
   region                       = var.region
   container_image_alert_replay = var.container_image_alert_replay
   container_image_orchestrator = local.orchestrator_image
-  container_image_api_gateway  = var.container_image_api_gateway
+  container_image_api_gateway  = local.api_gateway_image
   container_image_demo_target  = var.container_image_demo_target
   container_image_frontend     = var.container_image_frontend
-  depends_on                   = [google_project_service.required, terraform_data.build_orchestrator]
+  depends_on = [
+    google_project_service.required,
+    terraform_data.build_orchestrator,
+    terraform_data.build_api_gateway,
+  ]
 }
 
 module "pubsub" {
