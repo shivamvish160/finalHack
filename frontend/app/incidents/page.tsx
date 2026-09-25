@@ -69,16 +69,13 @@ export default function LiveIncidentConsolePage() {
             <th>Severity</th>
             <th>Region</th>
             <th>Started</th>
+            <th>Views</th>
           </tr>
         </thead>
         <tbody>
           {incidents.map((incident) => (
             <tr key={incident.incident_id} className="border-b hover:bg-gray-50">
-              <td className="py-2">
-                <a href={`/incidents/${incident.incident_id}/timeline`} className="text-blue-600 underline">
-                  {incident.incident_id}
-                </a>
-              </td>
+              <td className="py-2 font-mono text-xs">{incident.incident_id}</td>
               <td>{incident.title ?? '—'}</td>
               <td>
                 <span
@@ -94,6 +91,20 @@ export default function LiveIncidentConsolePage() {
               <td>{incident.severity ?? '—'}</td>
               <td>{incident.affected_region ?? '—'}</td>
               <td>{incident.started_at}</td>
+              <td className="space-x-2 whitespace-nowrap text-sm">
+                <a href={`/incidents/${incident.incident_id}/timeline`} className="text-blue-600 underline">
+                  Timeline
+                </a>
+                <a href={`/root-cause/${incident.incident_id}`} className="text-blue-600 underline">
+                  Root Cause
+                </a>
+                <a href={`/runbooks/${incident.incident_id}`} className="text-blue-600 underline">
+                  Runbooks
+                </a>
+                <a href={`/correlation/${incident.incident_id}`} className="text-blue-600 underline">
+                  Correlation
+                </a>
+              </td>
             </tr>
           ))}
         </tbody>
