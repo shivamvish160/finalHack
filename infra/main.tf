@@ -125,6 +125,34 @@ variable "container_image_frontend" {
   default = "us-central1-docker.pkg.dev/qwiklabs-gcp-03-677e28da7024/sre-incident-platform/frontend:latest"
 }
 
+locals {
+  orchestrator_source_files = concat(
+    [for file in fileset("${path.root}/../agents", "**/*.py") : "agents/${file}"],
+    [for file in fileset("${path.root}/../services/agent-orchestrator/app", "**/*.py") : "services/agent-orchestrator/app/${file}"],
+    ["services/agent-orchestrator/Dockerfile", "requirements.txt"],
+  )
+  orchestrator_source_hash = substr(sha256(join("", [
+    for file in sort(local.orchestrator_source_files) : filesha256("${path.root}/../${file}")
+  ])), 0, 16)
+  orchestrator_image = "${var.region}-docker.pkg.dev/${var.project_id}/sre-incident-platform/agent-orchestrator:${local.orchestrator_source_hash}"
+}
+
+# Build only when orchestrator/agent source changes. The content-addressed
+# image tag also guarantees Cloud Run creates a new revision; using :latest
+# left old revisions running after successful image pushes.
+resource "terraform_data" "build_orchestrator" {
+  triggers_replace = [local.orchestrator_source_hash]
+
+  provisioner "local-exec" {
+    command = "gcloud builds submit \"${path.root}/..\" --config=\"${path.root}/cloudbuild-agent-orchestrator.yaml\" --substitutions=_IMAGE=${local.orchestrator_image} --project=${var.project_id} --region=${var.region}"
+  }
+
+  depends_on = [
+    google_artifact_registry_repository.images,
+    google_project_iam_member.cloudbuild_artifact_registry_writer,
+  ]
+}
+
 module "secrets" {
   source     = "./modules/secrets"
   project_id = var.project_id
@@ -150,11 +178,11 @@ module "cloud_run" {
   project_id                   = var.project_id
   region                       = var.region
   container_image_alert_replay = var.container_image_alert_replay
-  container_image_orchestrator = var.container_image_orchestrator
+  container_image_orchestrator = local.orchestrator_image
   container_image_api_gateway  = var.container_image_api_gateway
   container_image_demo_target  = var.container_image_demo_target
   container_image_frontend     = var.container_image_frontend
-  depends_on                   = [google_project_service.required]
+  depends_on                   = [google_project_service.required, terraform_data.build_orchestrator]
 }
 
 module "pubsub" {
@@ -165,6 +193,20 @@ module "pubsub" {
   orchestrator_incidents_push_endpoint       = module.cloud_run.orchestrator_incidents_url
   orchestrator_predictive_push_endpoint      = module.cloud_run.orchestrator_predictive_url
   orchestrator_invoker_service_account_email = module.cloud_run.orchestrator_service_account_email
+}
+
+# Failed historical replay deliveries can keep retrying and saturate every
+# fresh Cloud Run revision before a small controlled demo run begins. Reset
+# only this replay subscription after orchestrator source changes; durable
+# warehouse data and all other event subscriptions are untouched.
+resource "terraform_data" "reset_replay_backlog" {
+  triggers_replace = [local.orchestrator_source_hash]
+
+  provisioner "local-exec" {
+    command = "gcloud pubsub subscriptions seek alerts.replay-sub --time=$(date -u +%Y-%m-%dT%H:%M:%SZ) --project=${var.project_id}"
+  }
+
+  depends_on = [module.cloud_run, module.pubsub]
 }
 
 module "scheduler" {

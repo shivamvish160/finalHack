@@ -35,6 +35,13 @@ class ClusterDecision:
         return len(self.clusters)
 
 
+def active_precedent_id(precedents: list[dict[str, Any]]) -> str | None:
+    """Return the newest reusable incident, excluding terminal states regardless of case."""
+    active_statuses = {"OPEN", "INVESTIGATING", "MONITORING"}
+    active = [p for p in precedents if str(p.get("status", "")).upper() in active_statuses]
+    return active[0]["incident_id"] if active else None
+
+
 def decide_cluster(
     alerts: list[dict[str, Any]], existing_clusters: list[list[dict[str, Any]]]
 ) -> ClusterDecision:

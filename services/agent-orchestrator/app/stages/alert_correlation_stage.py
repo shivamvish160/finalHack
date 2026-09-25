@@ -19,6 +19,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
 from agents.alert_correlation.agent import (  # noqa: E402
+    active_precedent_id,
     decide_cluster,
     fetch_known_nodes,
     fetch_precedent_incidents,
@@ -83,8 +84,7 @@ def _incident_id_for_cluster(bq_client: BigQueryClient, cluster: list[dict[str, 
     node_ids = list({a["nodeId"] for a in cluster})
     service_names = list({a["serviceName"] for a in cluster})
     precedents = fetch_precedent_incidents(bq_client, node_ids, service_names)
-    open_precedents = [p for p in precedents if p.get("status") not in ("Resolved", "Closed")]
-    return open_precedents[0]["incident_id"] if open_precedents else None
+    return active_precedent_id(precedents)
 
 
 def _write_incident_and_correlations(
