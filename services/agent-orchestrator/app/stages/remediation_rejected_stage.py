@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 from agents.common.bq_client import BigQueryClient, param  # noqa: E402
 
 
-async def handle_remediation_rejected(payload: dict[str, Any]) -> None:
+def handle_remediation_rejected(payload: dict[str, Any]) -> None:
     incident_id = payload["incidentId"]
     bq_client = BigQueryClient()
 

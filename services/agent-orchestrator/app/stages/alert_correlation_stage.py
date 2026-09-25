@@ -38,7 +38,7 @@ def cluster_key_for(alert_payload: dict[str, Any]) -> str:
     return f"{source['serviceName']}"
 
 
-async def handle_alerts_replay(payload: dict[str, Any]) -> list[dict[str, Any]]:
+def handle_alerts_replay(payload: dict[str, Any]) -> list[dict[str, Any]]:
     bq_client = BigQueryClient()
     firestore_client = FirestoreClient()
 

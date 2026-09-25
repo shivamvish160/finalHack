@@ -11,16 +11,21 @@ builds on.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import os
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable
+from typing import Any, Callable
 
 from fastapi import FastAPI, Request
 from google.cloud import pubsub_v1
 
-StageHandler = Callable[[dict[str, Any]], Awaitable[dict[str, Any] | list[dict[str, Any]] | None]]
+# Every stage handler is a plain, synchronous function (blocking BigQuery/
+# Firestore client calls, no real async I/O) -- dispatched via
+# asyncio.to_thread below so one slow handler can't block the whole event
+# loop and starve Cloud Run's configured request concurrency.
+StageHandler = Callable[[dict[str, Any]], dict[str, Any] | list[dict[str, Any]] | None]
 
 
 @dataclass(frozen=True)
@@ -71,7 +76,7 @@ class StageOrchestrator:
             # rather than making every handler unwrap the envelope itself.
             merged_payload = dict(envelope.data.get("payload") or {})
             merged_payload["incidentId"] = envelope.data.get("incidentId")
-            result = await handler(merged_payload)
+            result = await asyncio.to_thread(handler, merged_payload)
             # `next_topic` forwards the handler's own {"incidentId", "payload"}
             # return value(s) to the next stage in the pipeline -- a handler
             # may process >1 incident per call (e.g. alert correlation) and

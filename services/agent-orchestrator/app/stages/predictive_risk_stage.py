@@ -26,7 +26,7 @@ from agents.predictive_risk.agent import (  # noqa: E402
 )
 
 
-async def handle_predictions_tick(_payload: dict[str, Any]) -> dict[str, Any]:
+def handle_predictions_tick(_payload: dict[str, Any]) -> dict[str, Any]:
     bq_client = BigQueryClient()
     firestore_client = FirestoreClient()
 

@@ -20,7 +20,7 @@ from agents.common.bq_client import BigQueryClient  # noqa: E402
 _FORECAST_MODEL_SQL_PATH = Path(__file__).resolve().parents[5] / "infra" / "modules" / "bqml" / "forecast_model.sql"
 
 
-async def handle_retrain_tick(_payload: dict[str, Any]) -> None:
+def handle_retrain_tick(_payload: dict[str, Any]) -> None:
     bq_client = BigQueryClient()
     ddl = _FORECAST_MODEL_SQL_PATH.read_text(encoding="utf-8")
     bq_client.query(ddl)

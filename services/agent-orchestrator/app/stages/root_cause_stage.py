@@ -22,7 +22,7 @@ from agents.root_cause_analysis.agent import (  # noqa: E402
 )
 
 
-async def handle_incidents_correlated(payload: dict[str, Any]) -> dict[str, Any]:
+def handle_incidents_correlated(payload: dict[str, Any]) -> dict[str, Any]:
     incident_id = payload["incidentId"]
     bq_client = BigQueryClient()
     firestore_client = FirestoreClient()

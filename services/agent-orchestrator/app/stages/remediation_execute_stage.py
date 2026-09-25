@@ -19,7 +19,7 @@ from agents.common.audit_log import log_remediation_execution  # noqa: E402
 from agents.remediation.agent import execute_remediation  # noqa: E402
 
 
-async def handle_remediation_approved(payload: dict[str, Any]) -> dict[str, Any]:
+def handle_remediation_approved(payload: dict[str, Any]) -> dict[str, Any]:
     incident_id = payload["incidentId"]
     action_id = payload["actionId"]
 

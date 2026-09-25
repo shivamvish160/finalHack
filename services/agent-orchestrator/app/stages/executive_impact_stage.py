@@ -27,7 +27,7 @@ from agents.executive_impact.agent import (  # noqa: E402
 )
 
 
-async def handle_remediation_executed(payload: dict[str, Any]) -> dict[str, Any]:
+def handle_remediation_executed(payload: dict[str, Any]) -> dict[str, Any]:
     incident_id = payload["incidentId"]
     bq_client = BigQueryClient()
     firestore_client = FirestoreClient()
@@ -73,7 +73,7 @@ async def handle_remediation_executed(payload: dict[str, Any]) -> dict[str, Any]
     return {"incidentId": incident_id, "payload": executive_metrics}
 
 
-async def handle_risk_forecast_created(_payload: dict[str, Any]) -> None:
+def handle_risk_forecast_created(_payload: dict[str, Any]) -> None:
     """risk.forecast.created only refreshes the executive metrics snapshot's
     predicted-incident count; it never triggers a postmortem (FR-031 is
     resolved-incident-only)."""

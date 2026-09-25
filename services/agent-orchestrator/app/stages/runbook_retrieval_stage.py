@@ -17,7 +17,7 @@ from agents.common.bq_client import BigQueryClient  # noqa: E402
 from agents.runbook_retrieval.agent import build_match_response, find_matching_runbooks  # noqa: E402
 
 
-async def handle_root_cause_identified(payload: dict[str, Any]) -> dict[str, Any]:
+def handle_root_cause_identified(payload: dict[str, Any]) -> dict[str, Any]:
     incident_id = payload["incidentId"]
     root_cause = payload["rootCause"]
 

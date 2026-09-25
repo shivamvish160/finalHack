@@ -20,7 +20,7 @@ from agents.common.firestore_client import FirestoreClient  # noqa: E402
 from agents.remediation.agent import propose_remediation  # noqa: E402
 
 
-async def handle_runbook_matched(payload: dict[str, Any]) -> dict[str, Any] | None:
+def handle_runbook_matched(payload: dict[str, Any]) -> dict[str, Any] | None:
     incident_id = payload["incidentId"]
 
     if payload.get("belowThreshold"):
