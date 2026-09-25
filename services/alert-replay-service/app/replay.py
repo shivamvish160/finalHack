@@ -22,7 +22,7 @@ from typing import Any, Iterator
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # repo root, for `agents.common.*`
 
-from agents.common.bq_client import BigQueryClient  # noqa: E402
+from agents.common.bq_client import BigQueryClient, param  # noqa: E402
 from google.cloud import pubsub_v1  # noqa: E402
 
 
@@ -63,7 +63,11 @@ def fetch_alert_stream_rows(client: BigQueryClient) -> Iterator[dict[str, Any]]:
     yield from client.query_json_rows(sql)
 
 
-def run_replay_loop(target_msgs_per_minute: int = 1000, duration_seconds: float | None = None) -> None:
+def run_replay_loop(
+    target_msgs_per_minute: int = 1000,
+    duration_seconds: float | None = None,
+    wait_for_incidents_seconds: float = 0,
+) -> None:
     """Continuously replay `alert_stream` rows to the `alerts.replay` topic,
     looping over the finite row set to sustain the target throughput.
 
@@ -82,19 +86,48 @@ def run_replay_loop(target_msgs_per_minute: int = 1000, duration_seconds: float 
     interval_seconds = 60.0 / target_msgs_per_minute
     replay_session_id = str(uuid.uuid4())
     print(f"Replay session: {replay_session_id}", flush=True)
+    replay_started_at = datetime.now(timezone.utc)
     start_time = time.monotonic()
     index = 0
-    published = 0
+    publish_futures = []
     while duration_seconds is None or (time.monotonic() - start_time) < duration_seconds:
         row = rows[index % len(rows)]
         envelope = build_replay_envelope(row, replay_session_id)
-        publisher.publish(topic_path, _to_json_bytes(envelope))
-        published += 1
-        if published % 50 == 0:
-            print(f"Published {published} alerts so far...", flush=True)
+        publish_futures.append(publisher.publish(topic_path, _to_json_bytes(envelope)))
+        if len(publish_futures) % 50 == 0:
+            print(f"Queued {len(publish_futures)} alerts so far...", flush=True)
         index += 1
         time.sleep(interval_seconds)
-    print(f"Done: published {published} alerts to {topic_path}.", flush=True)
+
+    message_ids = [future.result(timeout=60) for future in publish_futures]
+    publisher.stop()
+    print(f"Done: Pub/Sub acknowledged {len(message_ids)} alerts on {topic_path}.", flush=True)
+
+    if wait_for_incidents_seconds:
+        deadline = time.monotonic() + wait_for_incidents_seconds
+        while time.monotonic() < deadline:
+            incidents = bq_client.query_json_rows(
+                """
+                SELECT incident_id, title, status, started_at
+                FROM `sre_incident_mart.incidents`
+                WHERE started_at >= @replay_started_at
+                ORDER BY started_at DESC
+                """,
+                [param("replay_started_at", "TIMESTAMP", replay_started_at)],
+            )
+            if incidents:
+                print(f"Created {len(incidents)} incident(s):", flush=True)
+                for incident in incidents:
+                    print(
+                        f"  {incident['incident_id']} | {incident.get('status')} | {incident.get('title')}",
+                        flush=True,
+                    )
+                return
+            time.sleep(2)
+        raise RuntimeError(
+            f"Pub/Sub accepted {len(message_ids)} alerts, but no new BigQuery incident appeared "
+            f"within {wait_for_incidents_seconds:g}s. Check agent-orchestrator-alerts logs."
+        )
 
 
 def _to_json_bytes(envelope: dict[str, Any]) -> bytes:
@@ -113,10 +146,12 @@ if __name__ == "__main__":
                          help="Stop after this many seconds. Omit to run forever (matches the deployed service).")
     parser.add_argument("--duration-minutes", type=float, default=None,
                          help="Stop after this many minutes (alternative to --duration-seconds).")
+    parser.add_argument("--wait-for-incidents-seconds", type=float, default=60,
+                         help="After a bounded run, wait this long for a new BigQuery incident (default: 60).")
     args = parser.parse_args()
 
     duration = args.duration_seconds
     if duration is None and args.duration_minutes is not None:
         duration = args.duration_minutes * 60
 
-    run_replay_loop(args.rate, duration)
+    run_replay_loop(args.rate, duration, args.wait_for_incidents_seconds if duration is not None else 0)
