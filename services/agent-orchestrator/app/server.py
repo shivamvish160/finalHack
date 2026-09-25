@@ -29,14 +29,41 @@ from .stages import (
 app = FastAPI(title="agent-orchestrator", version="0.1.0")
 _orchestrator = StageOrchestrator(app)
 
-_orchestrator.register_stage("/stages/alert-correlation", alert_correlation_stage.handle_alerts_replay)
-_orchestrator.register_stage("/stages/root-cause", root_cause_stage.handle_incidents_correlated)
-_orchestrator.register_stage("/stages/runbook-retrieval", runbook_retrieval_stage.handle_root_cause_identified)
-_orchestrator.register_stage("/stages/remediation-propose", remediation_propose_stage.handle_runbook_matched)
-_orchestrator.register_stage("/stages/remediation-execute", remediation_execute_stage.handle_remediation_approved)
+_orchestrator.register_stage(
+    "/stages/alert-correlation", alert_correlation_stage.handle_alerts_replay, next_topic="incidents.correlated"
+)
+_orchestrator.register_stage(
+    "/stages/root-cause", root_cause_stage.handle_incidents_correlated, next_topic="incidents.root_cause_identified"
+)
+_orchestrator.register_stage(
+    "/stages/runbook-retrieval",
+    runbook_retrieval_stage.handle_root_cause_identified,
+    next_topic="incidents.runbook_matched",
+)
+_orchestrator.register_stage(
+    "/stages/remediation-propose", remediation_propose_stage.handle_runbook_matched, next_topic="remediation.proposed"
+)
+_orchestrator.register_stage(
+    "/stages/remediation-execute",
+    remediation_execute_stage.handle_remediation_approved,
+    next_topic="remediation.executed",
+)
 _orchestrator.register_stage("/stages/remediation-rejected", remediation_rejected_stage.handle_remediation_rejected)
-_orchestrator.register_stage("/stages/predictive-risk", predictive_risk_stage.handle_predictions_tick)
-_orchestrator.register_stage("/stages/executive-impact", executive_impact_stage.handle_remediation_executed)
+_orchestrator.register_stage(
+    "/stages/predictive-risk", predictive_risk_stage.handle_predictions_tick, next_topic="risk.forecast.created"
+)
+# remediation.executed and risk.forecast.created both feed the Executive
+# Impact agent, but need 2 DISTINCT routes/handlers (not 1 shared route --
+# the payload shapes are unrelated and only one handler was ever reachable
+# when both topics' push subscriptions pointed at the same path).
+_orchestrator.register_stage(
+    "/stages/executive-impact-remediation",
+    executive_impact_stage.handle_remediation_executed,
+    next_topic="executive.metrics.updated",
+)
+_orchestrator.register_stage(
+    "/stages/executive-impact-forecast", executive_impact_stage.handle_risk_forecast_created
+)
 _orchestrator.register_stage("/stages/retrain-forecast-model", retrain_forecast_model_stage.handle_retrain_tick)
 
 

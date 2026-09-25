@@ -38,7 +38,7 @@ def cluster_key_for(alert_payload: dict[str, Any]) -> str:
     return f"{source['serviceName']}"
 
 
-async def handle_alerts_replay(payload: dict[str, Any]) -> None:
+async def handle_alerts_replay(payload: dict[str, Any]) -> list[dict[str, Any]]:
     bq_client = BigQueryClient()
     firestore_client = FirestoreClient()
 
@@ -61,11 +61,22 @@ async def handle_alerts_replay(payload: dict[str, Any]) -> None:
     node_ids = [a["nodeId"] for cluster in decision.clusters for a in cluster]
     known_nodes = fetch_known_nodes(bq_client, node_ids)
 
+    results = []
     for cluster in decision.clusters:
         incident_id = _incident_id_for_cluster(bq_client, cluster) or str(uuid.uuid4())
         _write_incident_and_correlations(bq_client, incident_id, cluster, known_nodes)
+        results.append(
+            {
+                "incidentId": incident_id,
+                "payload": {
+                    "correlatedAlertIds": [a["alertId"] for a in cluster],
+                    "affectedServices": sorted({a["serviceName"] for a in cluster}),
+                },
+            }
+        )
 
     firestore_client.add_pending_alert(cluster_key, replay_event_id, alert)
+    return results
 
 
 def _incident_id_for_cluster(bq_client: BigQueryClient, cluster: list[dict[str, Any]]) -> str | None:

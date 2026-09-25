@@ -20,7 +20,7 @@ from typing import Any, Awaitable, Callable
 from fastapi import FastAPI, Request
 from google.cloud import pubsub_v1
 
-StageHandler = Callable[[dict[str, Any]], Awaitable[None]]
+StageHandler = Callable[[dict[str, Any]], Awaitable[dict[str, Any] | list[dict[str, Any]] | None]]
 
 
 @dataclass(frozen=True)
@@ -59,7 +59,7 @@ class StageOrchestrator:
         self._project_id = project_id or os.environ["GCP_PROJECT_ID"]
         self._publisher = pubsub_v1.PublisherClient()
 
-    def register_stage(self, route_path: str, handler: StageHandler) -> None:
+    def register_stage(self, route_path: str, handler: StageHandler, next_topic: str | None = None) -> None:
         @self._app.post(route_path)
         async def _endpoint(request: Request) -> dict[str, str]:  # noqa: ANN202
             body = await request.json()
@@ -71,7 +71,15 @@ class StageOrchestrator:
             # rather than making every handler unwrap the envelope itself.
             merged_payload = dict(envelope.data.get("payload") or {})
             merged_payload["incidentId"] = envelope.data.get("incidentId")
-            await handler(merged_payload)
+            result = await handler(merged_payload)
+            # `next_topic` forwards the handler's own {"incidentId", "payload"}
+            # return value(s) to the next stage in the pipeline -- a handler
+            # may process >1 incident per call (e.g. alert correlation) and
+            # return a list, or a single dict, or None (nothing to forward,
+            # e.g. a below-threshold runbook match or a terminal stage).
+            if next_topic and result:
+                for item in result if isinstance(result, list) else [result]:
+                    self.publish(next_topic, item)
             # Returning 200 acks the message; an unhandled exception in
             # `handler` propagates as a 500, triggering Pub/Sub redelivery
             # and eventually the topic's -dlq after 5 attempts (NFR-012).

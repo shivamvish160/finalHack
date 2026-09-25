@@ -53,10 +53,10 @@ async def handle_remediation_executed(payload: dict[str, Any]) -> dict[str, Any]
 
     postmortem_params = build_postmortem_merge_params(
         incident_id=incident_id,
-        root_cause_summary=redact(payload["payload"].get("detail", "See incident record for root cause.")),
+        root_cause_summary=redact(payload.get("detail", "See incident record for root cause.")),
         timeline_summary="See /incidents/{id}/timeline for the full correlated-alert timeline.",
         remediation_summary=redact(
-            f"Executed action {payload['payload'].get('actionId')}: {payload['payload'].get('detail', '')}"
+            f"Executed action {payload.get('actionId')}: {payload.get('detail', '')}"
         ),
         business_impact_summary=(
             f"{impact['affectedCustomers']} customers, {impact['affectedUsers']} users, "

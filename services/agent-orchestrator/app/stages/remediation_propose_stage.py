@@ -22,15 +22,14 @@ from agents.remediation.agent import propose_remediation  # noqa: E402
 
 async def handle_runbook_matched(payload: dict[str, Any]) -> dict[str, Any] | None:
     incident_id = payload["incidentId"]
-    result = payload["payload"]
 
-    if result.get("belowThreshold"):
+    if payload.get("belowThreshold"):
         # No confident runbook match -- nothing to propose (AC-2.5); the
         # incident stays actionable for manual investigation.
         return None
 
     bq_client = BigQueryClient()
-    proposal = propose_remediation(bq_client, runbook_id=result["runbookId"])
+    proposal = propose_remediation(bq_client, runbook_id=payload["runbookId"])
 
     action_id = str(uuid.uuid4())
     FirestoreClient().create_approval(

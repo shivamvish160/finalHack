@@ -55,9 +55,9 @@ locals {
     "incidents.runbook_matched"       = { endpoint = var.orchestrator_incidents_push_endpoint, path = "/stages/remediation-propose" }
     "remediation.approved"            = { endpoint = var.orchestrator_incidents_push_endpoint, path = "/stages/remediation-execute" }
     "remediation.rejected"            = { endpoint = var.orchestrator_incidents_push_endpoint, path = "/stages/remediation-rejected" }
-    "remediation.executed"            = { endpoint = var.orchestrator_incidents_push_endpoint, path = "/stages/executive-impact" }
+    "remediation.executed"            = { endpoint = var.orchestrator_incidents_push_endpoint, path = "/stages/executive-impact-remediation" }
     "predictions.tick"                = { endpoint = var.orchestrator_predictive_push_endpoint, path = "/stages/predictive-risk" }
-    "risk.forecast.created"           = { endpoint = var.orchestrator_incidents_push_endpoint, path = "/stages/executive-impact" }
+    "risk.forecast.created"           = { endpoint = var.orchestrator_incidents_push_endpoint, path = "/stages/executive-impact-forecast" }
   }
 }
 

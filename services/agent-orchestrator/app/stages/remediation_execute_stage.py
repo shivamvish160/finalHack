@@ -21,7 +21,7 @@ from agents.remediation.agent import execute_remediation  # noqa: E402
 
 async def handle_remediation_approved(payload: dict[str, Any]) -> dict[str, Any]:
     incident_id = payload["incidentId"]
-    action_id = payload["payload"]["actionId"]
+    action_id = payload["actionId"]
 
     firestore_client = FirestoreClient()
     approval = firestore_client.get_approval(action_id)

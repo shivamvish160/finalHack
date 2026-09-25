@@ -19,7 +19,7 @@ from agents.runbook_retrieval.agent import build_match_response, find_matching_r
 
 async def handle_root_cause_identified(payload: dict[str, Any]) -> dict[str, Any]:
     incident_id = payload["incidentId"]
-    root_cause = payload["payload"]["rootCause"]
+    root_cause = payload["rootCause"]
 
     bq_client = BigQueryClient()
     matches = find_matching_runbooks(bq_client, query_text=root_cause)
