@@ -197,11 +197,14 @@ resource "google_cloud_run_v2_service" "alert_replay" {
   template {
     service_account = google_service_account.alert_replay.email
     scaling {
-      # MUST stay a singleton: each instance runs its own independent
-      # replay loop at the full target rate (services/alert-replay-service/
-      # app/server.py) -- scaling beyond 1 instance would silently
-      # multiply the alert-arrival rate, not just add capacity.
-      min_instance_count = 1
+      # min_instance_count=0 -- server.py auto-starts an ALWAYS-ON replay
+      # loop on startup, which was competing 24/7 for the same limited
+      # Cloud Run capacity/quota as agent-orchestrator-alerts (confirmed:
+      # even 5 test requests over 10s all failed with "no available
+      # instance" -- a hard capacity ceiling, not a throughput issue).
+      # Run replay.py manually (as documented in quickstart.md) for
+      # controlled, on-demand test runs instead of leaving this always-on.
+      min_instance_count = 0
       max_instance_count = 1
     }
     containers {
@@ -261,7 +264,7 @@ resource "google_cloud_run_v2_service" "orchestrator_incidents" {
     max_instance_request_concurrency = 4
     scaling {
       min_instance_count = 0
-      max_instance_count = 3
+      max_instance_count = 2
     }
     containers {
       image = var.container_image_orchestrator
@@ -306,7 +309,7 @@ resource "google_cloud_run_v2_service" "api_gateway" {
     service_account = google_service_account.api_gateway.email
     scaling {
       min_instance_count = 0
-      max_instance_count = 2
+      max_instance_count = 1
     }
     containers {
       image = var.container_image_api_gateway
@@ -365,7 +368,7 @@ resource "google_cloud_run_v2_service" "frontend" {
     service_account = google_service_account.frontend.email
     scaling {
       min_instance_count = 0
-      max_instance_count = 2
+      max_instance_count = 1
     }
     containers {
       image = var.container_image_frontend
