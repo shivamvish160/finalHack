@@ -21,7 +21,7 @@ def test_most_recent_active_precedent_is_reused():
 
 
 def test_replay_incident_id_is_stable_within_session_and_new_across_sessions():
-    first = replay_incident_id("session-a", ["billing", "api"])
+    first = replay_incident_id("session-a")
 
-    assert first == replay_incident_id("session-a", ["api", "billing"])
-    assert first != replay_incident_id("session-b", ["api", "billing"])
+    assert first == replay_incident_id("session-a")
+    assert first != replay_incident_id("session-b")

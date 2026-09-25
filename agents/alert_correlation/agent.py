@@ -43,10 +43,9 @@ def active_precedent_id(precedents: list[dict[str, Any]]) -> str | None:
     return active[0]["incident_id"] if active else None
 
 
-def replay_incident_id(replay_session_id: str, service_names: list[str]) -> str:
-    """Stable per-session/service incident ID: new replay run, new incident."""
-    cluster_identity = ",".join(sorted(set(service_names)))
-    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"sre-replay:{replay_session_id}:{cluster_identity}"))
+def replay_incident_id(replay_session_id: str) -> str:
+    """Stable incident ID shared by every alert in one bounded replay run."""
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"sre-replay:{replay_session_id}"))
 
 
 def decide_cluster(

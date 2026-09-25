@@ -45,7 +45,9 @@ Consumed by: Agent 1 (Alert Correlation).
 ```
 Dedup/clustering key is `replayEventId`, never `sourceAlert.alertId`
 (Clarification #2) — the same underlying row reappears many times across a
-demo run and must be treated as a fresh occurrence each time.
+demo run and must be treated as a fresh occurrence each time. All alerts
+sharing one `replaySessionId` converge on one incident for the bounded demo
+run, even when Pub/Sub delivers them concurrently.
 
 ## `incidents.correlated`
 Published by: Agent 1, after clustering one-or-more replayed alerts into an

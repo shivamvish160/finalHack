@@ -39,7 +39,7 @@ def cluster_key_for(alert_payload: dict[str, Any]) -> str:
     source = alert_payload["sourceAlert"]
     replay_session_id = alert_payload.get("replaySessionId")
     if replay_session_id:
-        return replay_incident_id(replay_session_id, [source["serviceName"]])
+        return replay_incident_id(replay_session_id)
     return source["serviceName"]
 
 
@@ -68,22 +68,33 @@ def handle_alerts_replay(payload: dict[str, Any]) -> list[dict[str, Any]]:
     known_nodes = fetch_known_nodes(bq_client, node_ids)
 
     results = []
+    session_incident_id = replay_incident_id(replay_session_id) if replay_session_id else None
     for cluster in decision.clusters:
-        incident_id = (
-            replay_incident_id(replay_session_id, [a["serviceName"] for a in cluster])
-            if replay_session_id
-            else _incident_id_for_cluster(bq_client, cluster) or str(uuid.uuid4())
-        )
+        incident_id = session_incident_id or _incident_id_for_cluster(bq_client, cluster) or str(uuid.uuid4())
         _write_incident_and_correlations(bq_client, incident_id, cluster, known_nodes)
-        results.append(
+        if not replay_session_id:
+            results.append(
+                {
+                    "incidentId": incident_id,
+                    "payload": {
+                        "correlatedAlertIds": [a["alertId"] for a in cluster],
+                        "affectedServices": sorted({a["serviceName"] for a in cluster}),
+                    },
+                }
+            )
+
+    if session_incident_id:
+        results = [
             {
-                "incidentId": incident_id,
+                "incidentId": session_incident_id,
                 "payload": {
-                    "correlatedAlertIds": [a["alertId"] for a in cluster],
-                    "affectedServices": sorted({a["serviceName"] for a in cluster}),
+                    "correlatedAlertIds": [a["alertId"] for cluster in decision.clusters for a in cluster],
+                    "affectedServices": sorted(
+                        {a["serviceName"] for cluster in decision.clusters for a in cluster}
+                    ),
                 },
             }
-        )
+        ]
 
     firestore_client.add_pending_alert(cluster_key, replay_event_id, alert)
     return results
