@@ -132,6 +132,14 @@ resource "google_project_iam_member" "orchestrator_secret_accessor" {
   member  = "serviceAccount:${google_service_account.orchestrator.email}"
 }
 
+# Needed for agents/common/audit_log.py's FR-037 audit trail (Cloud
+# Logging, not a BigQuery table) -- log_remediation_execution runs here.
+resource "google_project_iam_member" "orchestrator_log_writer" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.orchestrator.email}"
+}
+
 # Scoped ONLY to demo-target-service -- never project-wide run.developer.
 resource "google_cloud_run_v2_service_iam_member" "orchestrator_can_invoke_demo_target" {
   project  = var.project_id
@@ -162,6 +170,14 @@ resource "google_project_iam_member" "api_gateway_bq_viewer" {
 resource "google_project_iam_member" "api_gateway_bq_job_user" {
   project = var.project_id
   role    = "roles/bigquery.jobUser"
+  member  = "serviceAccount:${google_service_account.api_gateway.email}"
+}
+
+# Needed for agents/common/audit_log.py's FR-037 audit trail (Cloud
+# Logging, not a BigQuery table) -- log_incident_access/log_approval_decision run here.
+resource "google_project_iam_member" "api_gateway_log_writer" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
   member  = "serviceAccount:${google_service_account.api_gateway.email}"
 }
 
