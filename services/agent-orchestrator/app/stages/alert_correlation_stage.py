@@ -23,6 +23,7 @@ from agents.alert_correlation.agent import (  # noqa: E402
     decide_cluster,
     fetch_known_nodes,
     fetch_precedent_incidents,
+    replay_incident_id,
 )
 from agents.common.bq_client import BigQueryClient, array_param, param  # noqa: E402
 from agents.common.firestore_client import FirestoreClient  # noqa: E402
@@ -36,7 +37,10 @@ def cluster_key_for(alert_payload: dict[str, Any]) -> str:
     """Coarse clustering bucket key -- refined by decide_cluster's actual
     node/service overlap check, this just scopes the Firestore lookup."""
     source = alert_payload["sourceAlert"]
-    return f"{source['serviceName']}"
+    replay_session_id = alert_payload.get("replaySessionId")
+    if replay_session_id:
+        return replay_incident_id(replay_session_id, [source["serviceName"]])
+    return source["serviceName"]
 
 
 def handle_alerts_replay(payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -45,6 +49,7 @@ def handle_alerts_replay(payload: dict[str, Any]) -> list[dict[str, Any]]:
 
     source = payload["sourceAlert"]
     replay_event_id = payload["replayEventId"]
+    replay_session_id = payload.get("replaySessionId")
     alert = {
         "replayEventId": replay_event_id,
         "alertId": source["alertId"],
@@ -64,7 +69,11 @@ def handle_alerts_replay(payload: dict[str, Any]) -> list[dict[str, Any]]:
 
     results = []
     for cluster in decision.clusters:
-        incident_id = _incident_id_for_cluster(bq_client, cluster) or str(uuid.uuid4())
+        incident_id = (
+            replay_incident_id(replay_session_id, [a["serviceName"] for a in cluster])
+            if replay_session_id
+            else _incident_id_for_cluster(bq_client, cluster) or str(uuid.uuid4())
+        )
         _write_incident_and_correlations(bq_client, incident_id, cluster, known_nodes)
         results.append(
             {

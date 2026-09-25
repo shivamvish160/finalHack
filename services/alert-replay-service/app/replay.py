@@ -26,7 +26,7 @@ from agents.common.bq_client import BigQueryClient  # noqa: E402
 from google.cloud import pubsub_v1  # noqa: E402
 
 
-def build_replay_envelope(alert_row: dict[str, Any]) -> dict[str, Any]:
+def build_replay_envelope(alert_row: dict[str, Any], replay_session_id: str | None = None) -> dict[str, Any]:
     """Wrap one `alert_stream` row into an `alerts.replay` Pub/Sub envelope
     (contracts/pubsub-events.md)."""
     return {
@@ -36,6 +36,7 @@ def build_replay_envelope(alert_row: dict[str, Any]) -> dict[str, Any]:
         "incidentId": None,
         "payload": {
             "replayEventId": str(uuid.uuid4()),
+            "replaySessionId": replay_session_id or str(uuid.uuid4()),
             "sourceAlert": {
                 "alertId": alert_row["alert_id"],
                 "nodeId": alert_row["node_id"],
@@ -79,12 +80,14 @@ def run_replay_loop(target_msgs_per_minute: int = 1000, duration_seconds: float 
         raise RuntimeError("sre_telemetry.alert_stream returned zero rows -- nothing to replay")
 
     interval_seconds = 60.0 / target_msgs_per_minute
+    replay_session_id = str(uuid.uuid4())
+    print(f"Replay session: {replay_session_id}", flush=True)
     start_time = time.monotonic()
     index = 0
     published = 0
     while duration_seconds is None or (time.monotonic() - start_time) < duration_seconds:
         row = rows[index % len(rows)]
-        envelope = build_replay_envelope(row)
+        envelope = build_replay_envelope(row, replay_session_id)
         publisher.publish(topic_path, _to_json_bytes(envelope))
         published += 1
         if published % 50 == 0:

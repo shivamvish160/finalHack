@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import os
 import sys
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -40,6 +41,12 @@ def active_precedent_id(precedents: list[dict[str, Any]]) -> str | None:
     active_statuses = {"OPEN", "INVESTIGATING", "MONITORING"}
     active = [p for p in precedents if str(p.get("status", "")).upper() in active_statuses]
     return active[0]["incident_id"] if active else None
+
+
+def replay_incident_id(replay_session_id: str, service_names: list[str]) -> str:
+    """Stable per-session/service incident ID: new replay run, new incident."""
+    cluster_identity = ",".join(sorted(set(service_names)))
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"sre-replay:{replay_session_id}:{cluster_identity}"))
 
 
 def decide_cluster(

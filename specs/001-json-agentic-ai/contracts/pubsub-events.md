@@ -33,6 +33,7 @@ Consumed by: Agent 1 (Alert Correlation).
 {
   "payload": {
     "replayEventId": "uuid",
+    "replaySessionId": "uuid (shared by one bounded replay run)",
     "sourceAlert": {
       "alertId": "string", "nodeId": "string", "serviceName": "string",
       "severity": "string", "alertType": "string",
